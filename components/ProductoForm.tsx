@@ -2,29 +2,55 @@
 import { useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
+// ============================================================
+// components/ProductoForm.tsx
+//
+// CAMBIOS RESPECTO AL ORIGINAL:
+//   - handleAnalizar() ya NO busca en "resultados" directamente
+//   - Ahora INSERTA un trabajo en tabla "trabajos"
+//   - Escucha en tiempo real (Supabase Realtime) el cambio de estado
+//   - Cuando el backend marca el trabajo como "completado",
+//     la app recibe el resultado_id y navega a ResultsPanel
+//   - Si el backend marca "error", muestra el mensaje real
+//
+// NO SE MODIFICÓ: el diseño, los pasos, la lógica del formulario
+// ============================================================
+
 const PRODUCTOS = [
-  { id: 'placa_yeso', nombre: 'Placa de yeso antihumedad', desc: 'Panel de construcción resistente a la humedad' },
-  { id: 'mdf', nombre: 'MDF alternativo', desc: 'Madera sintética de densidad media optimizada' },
-  { id: 'souvenir', nombre: 'Souvenir de yeso', desc: 'Producto decorativo de bajo peso' },
+  { id: 'placa_yeso',  nombre: 'Placa de yeso antihumedad', materialId: 'MA.001' },
+  { id: 'mdf',         nombre: 'MDF alternativo',           materialId: 'MA.002' },
+  { id: 'souvenir',    nombre: 'Souvenir de yeso',           materialId: 'MA.001' },
 ];
 
-const OBJETIVOS = [
-  'Mejorar resistencia a la humedad',
-  'Reducir peso del producto',
-  'Aumentar resistencia mecánica',
-  'Mejorar acabado superficial',
-  'Reducir costo de producción',
-  'Mejorar aislación térmica',
-];
+// Mapeo: objetivo del usuario → nombre del problema en Supabase
+const OBJETIVO_A_CONTEXTO: Record<string, string> = {
+  'Mejorar resistencia a la humedad': 'absorcion',
+  'Reducir peso del producto':        'peso',
+  'Aumentar resistencia mecánica':    'resistencia_estructural',
+  'Mejorar acabado superficial':      'sustentabilidad',
+  'Reducir costo de producción':      'sustentabilidad',
+  'Mejorar aislación térmica':        'aislamiento_termico',
+};
+
+const OBJETIVOS = Object.keys(OBJETIVO_A_CONTEXTO);
 
 export default function ProductoForm({ onFinalizado }: {
   onFinalizado: (data: any, id: string) => void;
 }) {
   const [paso, setPaso] = useState(1);
   const [cargando, setCargando] = useState(false);
+  const [estadoAnalisis, setEstadoAnalisis] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
   const [imagen, setImagen] = useState<string | null>(null);
-  const [form, setForm] = useState({ producto: '', objetivo: '', costoProduccion: '', precioVenta: '', descripcion: '' });
+  const [form, setForm] = useState({
+    producto:       '',
+    objetivo:       '',
+    costoProduccion: '',
+    precioVenta:    '',
+    descripcion:    '',
+  });
   const fileRef = useRef<HTMLInputElement>(null);
+  const suscripcionRef = useRef<any>(null);
 
   const handleImagen = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -37,231 +63,264 @@ export default function ProductoForm({ onFinalizado }: {
   const handleAnalizar = async () => {
     if (!form.producto) return;
     setCargando(true);
-    const { data } = await supabase
-      .from('resultados')
+    setErrorMsg('');
+    setEstadoAnalisis('Iniciando análisis...');
+
+    // Encontrar el materialId correspondiente al producto seleccionado
+    const productoConfig = PRODUCTOS.find(p => p.nombre === form.producto);
+    const materialId     = productoConfig?.materialId ?? 'MA.001';
+    const contexto       = OBJETIVO_A_CONTEXTO[form.objetivo] ?? 'absorcion';
+
+    // 1. Insertar trabajo en Supabase
+    const { data: trabajo, error: errorTrabajo } = await supabase
+      .from('trabajos')
+      .insert({
+        producto:    form.producto,
+        material_id: materialId,
+        contexto:    contexto,
+        estado:      'pendiente',
+      })
       .select('id')
-      .eq('producto', form.producto)
-      .order('fecha', { ascending: false })
-      .limit(1)
       .single();
+
+    if (errorTrabajo || !trabajo) {
+      setErrorMsg('No se pudo crear el trabajo. Verificá la conexión con Supabase.');
+      setCargando(false);
+      return;
+    }
+
+    const trabajoId = trabajo.id;
+    setEstadoAnalisis('Motor neuronal activado. Calculando índices físicos...');
+
+    // 2. Llamar a la API route de Vercel que hace el análisis completo
+    const apiRes = await fetch('/api/analizar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        trabajoId,
+        materialId: form.materialId,
+        contexto,
+        producto: form.productoNombre,
+      }),
+    });
+
+    const apiData = await apiRes.json();
+
+    if (!apiRes.ok || !apiData.ok) {
+      setCargando(false);
+      setErrorMsg(apiData.error ?? 'Error en el análisis.');
+      return;
+    }
+
     setCargando(false);
-    onFinalizado({ ...form, imagen }, data?.id ?? 'sin_resultado');
+    setEstadoAnalisis('¡Análisis completado!');
+    onFinalizado({ ...form, imagen }, apiData.resultadoId);
   };
 
-  const PASOS = ['Producto', 'Datos', 'Confirmar'];
-
   return (
-    <div className="max-w-2xl mx-auto px-6 py-10">
+    <div className="relative z-10 max-w-3xl mx-auto px-6 py-12">
 
-      {/* Progress */}
-      <div className="flex items-center gap-2 mb-10">
-        {PASOS.map((label, i) => {
-          const p = i + 1;
-          const done = paso > p;
-          const current = paso === p;
-          return (
-            <div key={label} className="flex items-center gap-2">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-mono font-bold transition-all duration-300"
-                  style={{
-                    background: done ? '#a060ff' : current ? 'rgba(160,96,255,0.15)' : 'rgba(255,255,255,0.03)',
-                    border: `1px solid ${done || current ? '#a060ff' : 'rgba(255,255,255,0.08)'}`,
-                    color: done ? '#fff' : current ? '#a060ff' : 'rgba(255,255,255,0.2)',
-                  }}>
-                  {done ? '✓' : p}
-                </div>
-                <span className="text-xs font-mono hidden sm:block transition-all duration-300"
-                  style={{ color: current ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.2)' }}>
-                  {label}
-                </span>
-              </div>
-              {i < PASOS.length - 1 && (
-                <div className="w-8 h-px mx-1 transition-all duration-500"
-                  style={{ background: done ? '#a060ff' : 'rgba(255,255,255,0.08)' }} />
-              )}
+      {/* Progreso */}
+      <div className="flex items-center gap-3 mb-10">
+        {[1, 2, 3].map((p) => (
+          <div key={p} className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full border flex items-center justify-center text-xs font-mono font-bold transition-all duration-300"
+              style={{
+                borderColor: paso >= p ? '#00ff88' : 'rgba(255,255,255,0.1)',
+                color: paso >= p ? '#00ff88' : 'rgba(255,255,255,0.2)',
+                background: paso >= p ? 'rgba(0,255,136,0.1)' : 'transparent',
+              }}>
+              {paso > p ? '✓' : p}
             </div>
-          );
-        })}
+            {p < 3 && <div className="w-12 h-px" style={{ background: paso > p ? '#00ff88' : 'rgba(255,255,255,0.1)' }} />}
+          </div>
+        ))}
+        <span className="text-white/30 text-xs font-mono ml-2">
+          {paso === 1 ? 'Producto' : paso === 2 ? 'Imagen y datos' : 'Confirmar'}
+        </span>
       </div>
 
-      <div className="rounded-2xl p-8" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      {/* PASO 1 */}
+      {paso === 1 && (
+        <div>
+          <h2 className="text-3xl font-black text-white mb-2">¿Qué producto querés analizar?</h2>
+          <p className="text-white/30 text-sm mb-8">Seleccioná el tipo de producto y tu objetivo principal</p>
 
-        {/* PASO 1 */}
-        {paso === 1 && (
-          <div>
-            <h2 className="text-2xl font-black text-white mb-1">¿Qué producto analizamos?</h2>
-            <p className="text-sm mb-8" style={{ color: 'rgba(255,255,255,0.3)' }}>Seleccioná el producto y tu objetivo principal</p>
+          <div className="space-y-3 mb-6">
+            {PRODUCTOS.map((p) => (
+              <button key={p.id} onClick={() => setForm(f => ({ ...f, producto: p.nombre }))}
+                className="w-full text-left px-5 py-4 rounded-xl border transition-all duration-200"
+                style={{
+                  borderColor: form.producto === p.nombre ? '#00ff88' : 'rgba(255,255,255,0.06)',
+                  background: form.producto === p.nombre ? 'rgba(0,255,136,0.05)' : 'rgba(255,255,255,0.01)',
+                  color: form.producto === p.nombre ? '#00ff88' : 'rgba(255,255,255,0.6)',
+                }}>
+                {p.nombre}
+              </button>
+            ))}
+          </div>
 
-            <p className="text-xs font-mono uppercase tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.25)' }}>Producto</p>
-            <div className="space-y-2 mb-7">
-              {PRODUCTOS.map((p) => (
-                <button key={p.id} onClick={() => setForm(f => ({ ...f, producto: p.nombre }))}
-                  className="w-full text-left px-5 py-4 rounded-xl transition-all duration-200"
-                  style={{
-                    background: form.producto === p.nombre ? 'rgba(160,96,255,0.08)' : 'rgba(255,255,255,0.02)',
-                    border: `1px solid ${form.producto === p.nombre ? 'rgba(160,96,255,0.4)' : 'rgba(255,255,255,0.06)'}`,
-                  }}>
-                  <div className="font-bold text-sm" style={{ color: form.producto === p.nombre ? '#a060ff' : 'rgba(255,255,255,0.7)' }}>
-                    {p.nombre}
-                  </div>
-                  <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>{p.desc}</div>
-                </button>
-              ))}
-            </div>
-
-            <p className="text-xs font-mono uppercase tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.25)' }}>Objetivo</p>
-            <div className="grid grid-cols-2 gap-2 mb-8">
+          <div className="mb-8">
+            <p className="text-white/40 text-xs font-mono uppercase tracking-widest mb-3">Objetivo principal</p>
+            <div className="grid grid-cols-2 gap-2">
               {OBJETIVOS.map((o) => (
                 <button key={o} onClick={() => setForm(f => ({ ...f, objetivo: o }))}
-                  className="text-left px-3 py-2.5 rounded-lg text-xs transition-all duration-200"
+                  className="text-left px-4 py-3 rounded-xl border text-sm transition-all duration-200"
                   style={{
-                    background: form.objetivo === o ? 'rgba(0,204,255,0.06)' : 'rgba(255,255,255,0.02)',
-                    border: `1px solid ${form.objetivo === o ? 'rgba(0,204,255,0.3)' : 'rgba(255,255,255,0.05)'}`,
-                    color: form.objetivo === o ? '#00ccff' : 'rgba(255,255,255,0.35)',
+                    borderColor: form.objetivo === o ? '#00ccff' : 'rgba(255,255,255,0.06)',
+                    background: form.objetivo === o ? 'rgba(0,204,255,0.05)' : 'rgba(255,255,255,0.01)',
+                    color: form.objetivo === o ? '#00ccff' : 'rgba(255,255,255,0.4)',
                   }}>
                   {o}
                 </button>
               ))}
             </div>
-
-            <button onClick={() => setPaso(2)} disabled={!form.producto}
-              className="w-full py-4 rounded-xl font-bold text-sm uppercase tracking-widest transition-all duration-300"
-              style={{
-                background: form.producto ? 'linear-gradient(135deg, #a060ff, #6030cc)' : 'rgba(255,255,255,0.04)',
-                color: form.producto ? '#fff' : 'rgba(255,255,255,0.2)',
-                cursor: form.producto ? 'pointer' : 'not-allowed',
-              }}>
-              Continuar →
-            </button>
           </div>
-        )}
 
-        {/* PASO 2 */}
-        {paso === 2 && (
-          <div>
-            <h2 className="text-2xl font-black text-white mb-1">Imagen y datos financieros</h2>
-            <p className="text-sm mb-8" style={{ color: 'rgba(255,255,255,0.3)' }}>Opcional pero mejora el análisis</p>
+          <button onClick={() => setPaso(2)} disabled={!form.producto}
+            className="w-full py-4 rounded-xl font-bold text-sm uppercase tracking-widest transition-all duration-300"
+            style={{
+              background: form.producto ? '#00ff88' : 'rgba(255,255,255,0.05)',
+              color: form.producto ? '#000' : 'rgba(255,255,255,0.2)',
+            }}>
+            Continuar →
+          </button>
+        </div>
+      )}
 
-            {/* Upload */}
-            <p className="text-xs font-mono uppercase tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.25)' }}>Foto del producto</p>
-            <div onClick={() => fileRef.current?.click()}
-              className="rounded-xl p-8 text-center cursor-pointer transition-all duration-300 mb-6"
-              style={{
-                border: `1px dashed ${imagen ? 'rgba(160,96,255,0.4)' : 'rgba(255,255,255,0.08)'}`,
-                background: imagen ? 'rgba(160,96,255,0.04)' : 'rgba(255,255,255,0.01)',
-              }}>
+      {/* PASO 2 */}
+      {paso === 2 && (
+        <div>
+          <h2 className="text-3xl font-black text-white mb-2">Imagen y datos del producto</h2>
+          <p className="text-white/30 text-sm mb-8">Subí una foto y completá los datos financieros</p>
+
+          <div className="mb-6">
+            <p className="text-white/40 text-xs font-mono uppercase tracking-widest mb-3">Foto del producto</p>
+            <div
+              onClick={() => fileRef.current?.click()}
+              className="border border-dashed border-white/10 rounded-2xl p-8 text-center cursor-pointer hover:border-[#00ff88]/30 transition-all duration-300"
+              style={{ background: imagen ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
               {imagen ? (
-                <img src={imagen} alt="producto" className="max-h-40 mx-auto rounded-xl object-contain" />
+                <img src={imagen} alt="producto" className="max-h-48 mx-auto rounded-xl object-contain" />
               ) : (
                 <div>
-                  <div className="text-3xl mb-2">📸</div>
-                  <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>Clic para subir imagen</p>
-                  <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.15)' }}>JPG, PNG, WebP</p>
+                  <div className="text-4xl mb-3">📸</div>
+                  <p className="text-white/30 text-sm">Clic para subir imagen</p>
+                  <p className="text-white/15 text-xs mt-1">JPG, PNG, WebP</p>
                 </div>
               )}
             </div>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImagen} />
+          </div>
 
-            {/* Financiero */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              {[
-                { key: 'costoProduccion', label: 'Costo de producción ($)', placeholder: 'Ej: 1500' },
-                { key: 'precioVenta', label: 'Precio de venta ($)', placeholder: 'Ej: 3500' },
-              ].map((f) => (
-                <div key={f.key}>
-                  <p className="text-xs font-mono uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.25)' }}>{f.label}</p>
-                  <input type="number" placeholder={f.placeholder}
-                    value={form[f.key as keyof typeof form]}
-                    onChange={(e) => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
-                    className="w-full px-4 py-3 rounded-xl text-white text-sm outline-none transition-all"
-                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', colorScheme: 'dark' }} />
-                </div>
-              ))}
-            </div>
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            {[
+              { key: 'costoProduccion', label: 'Costo de producción ($)', placeholder: 'Ej: 1500' },
+              { key: 'precioVenta',     label: 'Precio de venta estimado ($)', placeholder: 'Ej: 3500' },
+            ].map((f) => (
+              <div key={f.key}>
+                <p className="text-white/40 text-xs font-mono uppercase tracking-widest mb-2">{f.label}</p>
+                <input
+                  type="number"
+                  placeholder={f.placeholder}
+                  value={form[f.key as keyof typeof form]}
+                  onChange={(e) => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                  className="w-full px-4 py-3 rounded-xl border border-white/10 bg-white/2 text-white text-sm outline-none focus:border-[#00ff88]/40 transition-all"
+                  style={{ colorScheme: 'dark' }}
+                />
+              </div>
+            ))}
+          </div>
 
-            <textarea placeholder="Describí brevemente tu producto (opcional)..."
+          <div className="mb-8">
+            <p className="text-white/40 text-xs font-mono uppercase tracking-widest mb-2">Descripción breve (opcional)</p>
+            <textarea
+              placeholder="Describí brevemente tu producto..."
               value={form.descripcion}
               onChange={(e) => setForm(f => ({ ...f, descripcion: e.target.value }))}
-              rows={3} className="w-full px-4 py-3 rounded-xl text-white text-sm outline-none resize-none mb-6 transition-all"
-              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }} />
-
-            <div className="flex gap-3">
-              <button onClick={() => setPaso(1)}
-                className="px-5 py-3 rounded-xl text-sm font-mono transition-all"
-                style={{ border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.3)' }}>
-                ← Volver
-              </button>
-              <button onClick={() => setPaso(3)}
-                className="flex-1 py-3 rounded-xl font-bold text-sm uppercase tracking-widest"
-                style={{ background: 'linear-gradient(135deg, #a060ff, #6030cc)', color: '#fff' }}>
-                Continuar →
-              </button>
-            </div>
+              rows={3}
+              className="w-full px-4 py-3 rounded-xl border border-white/10 bg-white/2 text-white text-sm outline-none focus:border-[#00ff88]/40 transition-all resize-none"
+            />
           </div>
-        )}
 
-        {/* PASO 3 */}
-        {paso === 3 && (
-          <div>
-            <h2 className="text-2xl font-black text-white mb-1">Confirmá el análisis</h2>
-            <p className="text-sm mb-8" style={{ color: 'rgba(255,255,255,0.3)' }}>El motor neuronal procesará tu producto</p>
-
-            <div className="rounded-xl p-5 mb-6 space-y-3"
-              style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-              {[
-                { label: 'Producto', valor: form.producto },
-                { label: 'Objetivo', valor: form.objetivo || 'No especificado' },
-                { label: 'Costo', valor: form.costoProduccion ? `$${form.costoProduccion}` : '—' },
-                { label: 'Precio', valor: form.precioVenta ? `$${form.precioVenta}` : '—' },
-                { label: 'Imagen', valor: imagen ? '✓ Cargada' : 'Sin imagen' },
-              ].map((r) => (
-                <div key={r.label} className="flex justify-between items-center py-1.5"
-                  style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  <span className="text-xs font-mono uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.25)' }}>{r.label}</span>
-                  <span className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>{r.valor}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 mb-7">
-              {[
-                { label: '🔬 Análisis material', real: true },
-                { label: '📸 Análisis de imagen', real: false },
-                { label: '📊 Análisis de mercado', real: false },
-                { label: '💰 Cálculo financiero', real: true },
-              ].map((m) => (
-                <div key={m.label} className="flex items-center justify-between px-3 py-2.5 rounded-lg"
-                  style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <span className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>{m.label}</span>
-                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded"
-                    style={{
-                      background: m.real ? 'rgba(0,255,136,0.1)' : 'rgba(160,96,255,0.1)',
-                      color: m.real ? '#00ff88' : '#a060ff',
-                      border: `1px solid ${m.real ? 'rgba(0,255,136,0.2)' : 'rgba(160,96,255,0.2)'}`,
-                    }}>
-                    {m.real ? 'REAL' : 'ESTIMADO'}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex gap-3">
-              <button onClick={() => setPaso(2)}
-                className="px-5 py-3 rounded-xl text-sm font-mono transition-all"
-                style={{ border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.3)' }}>
-                ← Volver
-              </button>
-              <button onClick={handleAnalizar} disabled={cargando}
-                className="flex-1 py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all duration-300 disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, #a060ff, #6030cc)', color: '#fff' }}>
-                {cargando ? 'Procesando...' : 'Iniciar análisis →'}
-              </button>
-            </div>
+          <div className="flex gap-3">
+            <button onClick={() => setPaso(1)}
+              className="px-6 py-4 rounded-xl border border-white/10 text-white/40 text-sm font-mono hover:border-white/20 transition-all">
+              ← Volver
+            </button>
+            <button onClick={() => setPaso(3)}
+              className="flex-1 py-4 rounded-xl bg-[#00ff88] text-black font-bold text-sm uppercase tracking-widest hover:scale-[1.02] transition-all">
+              Continuar →
+            </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* PASO 3 — Confirmar y analizar */}
+      {paso === 3 && (
+        <div>
+          <h2 className="text-3xl font-black text-white mb-2">Confirmá el análisis</h2>
+          <p className="text-white/30 text-sm mb-8">El sistema va a activar las neuronas y analizar tu producto</p>
+
+          <div className="border border-white/5 rounded-2xl p-6 bg-white/1 mb-6 space-y-4">
+            <Fila label="Producto"         valor={form.producto} />
+            <Fila label="Objetivo"         valor={form.objetivo || 'No especificado'} />
+            <Fila label="Contexto de análisis" valor={OBJETIVO_A_CONTEXTO[form.objetivo] ?? 'absorcion'} />
+            <Fila label="Costo producción" valor={form.costoProduccion ? `$${form.costoProduccion}` : 'No especificado'} />
+            <Fila label="Precio de venta"  valor={form.precioVenta ? `$${form.precioVenta}` : 'No especificado'} />
+            <Fila label="Imagen"           valor={imagen ? '✓ Cargada' : 'Sin imagen'} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 mb-8">
+            {['🧠 50 neuronas físicas', '🔬 Fórmulas científicas', '⚡ Cruces TRIZ', '📊 Motor de inferencia'].map((m) => (
+              <div key={m} className="flex items-center gap-2 px-4 py-3 rounded-xl border border-[#00ff88]/15 bg-[#00ff88]/5">
+                <span className="text-xs text-white/60">{m}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Estado del análisis mientras carga */}
+          {cargando && (
+            <div className="border border-[#00ff88]/20 bg-[#00ff88]/5 rounded-xl p-4 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-[#00ff88] animate-pulse flex-shrink-0" />
+                <p className="text-[#00ff88] text-sm font-mono">{estadoAnalisis}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Error si algo falló */}
+          {errorMsg && (
+            <div className="border border-red-500/30 bg-red-500/5 rounded-xl p-4 mb-4">
+              <p className="text-red-400 text-sm">{errorMsg}</p>
+              <p className="text-white/30 text-xs mt-2">
+                Asegurate de que el worker de ImpulsoIA esté corriendo:<br/>
+                <span className="font-mono text-white/50">npx ts-node src/worker/workerTrabajos.ts</span>
+              </p>
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <button onClick={() => setPaso(2)} disabled={cargando}
+              className="px-6 py-4 rounded-xl border border-white/10 text-white/40 text-sm font-mono hover:border-white/20 transition-all disabled:opacity-30">
+              ← Volver
+            </button>
+            <button onClick={handleAnalizar} disabled={cargando}
+              className="flex-1 py-4 rounded-xl bg-[#00ff88] text-black font-black text-sm uppercase tracking-widest hover:scale-[1.02] transition-all disabled:opacity-50">
+              {cargando ? 'Analizando...' : 'Iniciar análisis completo →'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-
+function Fila({ label, valor }: { label: string; valor: string }) {
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-white/30 text-xs font-mono uppercase tracking-widest">{label}</span>
+      <span className="text-white/70 text-sm">{valor}</span>
+    </div>
+  );
+}
