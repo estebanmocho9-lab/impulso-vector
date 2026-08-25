@@ -1,46 +1,67 @@
-// api/products/[id].js
-// Endpoint: GET /api/products/:id
-// Devuelve el detalle de un producto puntual (usado por loadProductDetail en el front).
-// NOTA: datos de ejemplo (mock), a reemplazar por la conexión real al motor ARKON.
+import { createClient } from '@supabase/supabase-js';
 
-const PRODUCTS_DETAIL = {
-  'MA.001': {
-    id: 'MA.001',
-    nombre: 'Placa Antihumedad de Yeso Cerámico',
-    categoria: 'Construcción / Interiores',
-    estado: 'Disponible',
-    alternativas: [
-      { opcion: 'Material Silíceo Liviano', costo: '-12%', absorcion: '-18%', resistencia: '+8%', impactoAmbiental: '-15%' }
-    ]
-  },
-  'MA.002': {
-    id: 'MA.002',
-    nombre: 'Mortero Autonivelante de Alta Resistencia',
-    categoria: 'Pisos / Estructural',
-    estado: 'Disponible',
-    alternativas: []
-  },
-  'MA.003': {
-    id: 'MA.003',
-    nombre: 'Ladrillo Térmico Celular Alveolar',
-    categoria: 'Mampostería / Térmico',
-    estado: 'Disponible',
-    alternativas: []
-  }
-};
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', ['GET']);
     return res.status(405).json({ success: false, mensaje: 'Método no permitido' });
   }
 
   const { id } = req.query;
-  const product = PRODUCTS_DETAIL[id];
 
-  if (!product) {
-    return res.status(404).json({ success: false, mensaje: 'Producto no encontrado' });
+  let { data: producto, error } = await supabase
+    .from('productos')
+    .select('id, nombre, contexto, composicion, material_id, activo, created_at')
+    .eq('material_id', id)
+    .eq('activo', true)
+    .limit(1)
+    .maybeSingle();
+
+  if (!producto && !error) {
+    const numericId = Number(id);
+    if (!Number.isNaN(numericId)) {
+      const resp = await supabase
+        .from('productos')
+        .select('id, nombre, contexto, composicion, material_id, activo, created_at')
+        .eq('id', numericId)
+        .maybeSingle();
+      producto = resp.data;
+      error = resp.error;
+    }
   }
 
-  return res.status(200).json({ success: true, product });
+  if (error) {
+    console.error('Error consultando producto en Supabase:', error.message);
+    return res.status(500).json({ success: false, mensaje: 'Error al consultar el producto' });
+  }
+
+  if (!producto) {
+    return res.status(404).json({ success: false, mensaje: 'Producto no encontrado en el catálogo de ARKON' });
+  }
+
+  let componentesReales = [];
+  if (producto.material_id) {
+    const { data: comps } = await supabase
+      .from('componentes_materiales')
+      .select('nombre_componente, porcentaje_texto, porcentaje_min, porcentaje_max')
+      .eq('id_material', producto.material_id);
+    componentesReales = comps || [];
+  }
+
+  return res.status(200).json({
+    success: true,
+    product: {
+      id: producto.material_id || String(producto.id),
+      nombre: producto.nombre,
+      categoria: producto.contexto || 'Sin categoría asignada',
+      estado: 'Disponible',
+      composicion: producto.composicion || null,
+      componentes: componentesReales,
+      alternativas: [],
+    },
+  });
 }
