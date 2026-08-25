@@ -1378,12 +1378,12 @@ export default function ArkonVisual() {
       if (compContent && p.alternativas) {
         compContent.innerHTML = p.alternativas.map((alt: any) => `
           <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
-            <div class="font-bold text-white text-sm">${'${alt.opcion}'}</div>
+            <div class="font-bold text-white text-sm">${alt.opcion}</div>
             <div class="grid grid-cols-2 gap-2 text-xs">
-              <div class="text-slate-400">Costo: <strong class="text-cyan-400">${'${alt.costo}'}</strong></div>
-              <div class="text-slate-400">Absorción: <strong class="text-slate-200">${'${alt.absorcion}'}</strong></div>
-              <div class="text-slate-400">Resistencia: <strong class="text-emerald-400">${'${alt.resistencia}'}</strong></div>
-              <div class="text-slate-400">CO2: <strong class="text-slate-200">${'${alt.impactoAmbiental}'}</strong></div>
+              <div class="text-slate-400">Costo: <strong class="text-cyan-400">${alt.costo}</strong></div>
+              <div class="text-slate-400">Absorción: <strong class="text-slate-200">${alt.absorcion}</strong></div>
+              <div class="text-slate-400">Resistencia: <strong class="text-emerald-400">${alt.resistencia}</strong></div>
+              <div class="text-slate-400">CO2: <strong class="text-slate-200">${alt.impactoAmbiental}</strong></div>
             </div>
           </div>
         `).join('');
@@ -1397,15 +1397,15 @@ export default function ArkonVisual() {
         <div class="glass-card rounded-2xl p-6 flex flex-col justify-between space-y-4 glass-card-hover">
           <div class="space-y-2">
             <div class="flex justify-between items-start">
-              <span class="text-xs font-mono px-2.5 py-1 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">${'${p.id}'}</span>
-              <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">${'${p.estado}'}</span>
+              <span class="text-xs font-mono px-2.5 py-1 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">${p.id}</span>
+              <span class="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">${p.estado}</span>
             </div>
-            <h4 class="text-base font-bold text-white mt-2">${'${p.nombre}'}</h4>
-            <p class="text-xs text-slate-400">${'${p.categoria}'}</p>
+            <h4 class="text-base font-bold text-white mt-2">${p.nombre}</h4>
+            <p class="text-xs text-slate-400">${p.categoria}</p>
           </div>
           <div class="pt-4 border-t border-slate-800/80 flex items-center justify-between">
-            <span class="text-[11px] text-slate-400 font-mono">Último análisis: ${'${p.ultimoAnalisis}'}</span>
-            <button onclick="seleccionarYAnalizar('${'${p.id}'}')" class="px-4 py-2 rounded-xl text-xs font-semibold bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition cursor-pointer font-bold">
+            <span class="text-[11px] text-slate-400 font-mono">Último análisis: ${p.ultimoAnalisis}</span>
+            <button onclick="seleccionarYAnalizar('${p.id}')" class="px-4 py-2 rounded-xl text-xs font-semibold bg-cyan-500 hover:bg-cyan-400 text-slate-950 transition cursor-pointer font-bold">
               Analizar →
             </button>
           </div>
@@ -1483,7 +1483,7 @@ export default function ArkonVisual() {
       tr.innerHTML = `
         <td class="py-3.5 px-4 font-medium text-white" contenteditable="true">Nuevo Proyecto de Formulación</td>
         <td class="py-3.5 px-4"><span class="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[10px] font-mono border border-amber-500/20">Borrador</span></td>
-        <td class="py-3.5 px-4 text-right font-mono text-slate-400">${'${fechaHoy}'}</td>
+        <td class="py-3.5 px-4 text-right font-mono text-slate-400">${fechaHoy}</td>
       `;
       tbody.prepend(tr);
     }
