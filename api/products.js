@@ -1,43 +1,34 @@
-// api/products.js
-// Endpoint: GET /api/products
-// Devuelve el catálogo de productos usado por el dashboard ARKON.
-// NOTA: estos son datos de ejemplo (mock). Cuando conectemos el sistema
-// madre ARKON, esta función va a leer de la base real (Supabase/Turso)
-// en lugar de este array fijo.
+import { createClient } from '@supabase/supabase-js';
 
-const PRODUCTS = [
-  {
-    id: 'MA.001',
-    nombre: 'Placa Antihumedad de Yeso Cerámico',
-    categoria: 'Construcción / Interiores',
-    estado: 'Disponible',
-    ultimoAnalisis: '23/05/2026',
-    alternativas: [
-      { opcion: 'Material Silíceo Liviano', costo: '-12%', absorcion: '-18%', resistencia: '+8%', impactoAmbiental: '-15%' }
-    ]
-  },
-  {
-    id: 'MA.002',
-    nombre: 'Mortero Autonivelante de Alta Resistencia',
-    categoria: 'Pisos / Estructural',
-    estado: 'Disponible',
-    ultimoAnalisis: '14/04/2026',
-    alternativas: []
-  },
-  {
-    id: 'MA.003',
-    nombre: 'Ladrillo Térmico Celular Alveolar',
-    categoria: 'Mampostería / Térmico',
-    estado: 'Disponible',
-    ultimoAnalisis: '02/03/2026',
-    alternativas: []
-  }
-];
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', ['GET']);
     return res.status(405).json({ success: false, mensaje: 'Método no permitido' });
   }
-  return res.status(200).json(PRODUCTS);
+
+  const { data, error } = await supabase
+    .from('productos')
+    .select('id, nombre, contexto, material_id, activo, created_at')
+    .eq('activo', true)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error consultando productos en Supabase:', error.message);
+    return res.status(500).json({ success: false, mensaje: 'Error al consultar el catálogo' });
+  }
+
+  const catalogo = (data || []).map((p) => ({
+    id: p.material_id || String(p.id),
+    nombre: p.nombre,
+    categoria: p.contexto || 'Sin categoría asignada',
+    estado: 'Disponible',
+    ultimoAnalisis: new Date(p.created_at).toLocaleDateString('es-AR'),
+  }));
+
+  return res.status(200).json(catalogo);
 }
