@@ -1,10 +1,11 @@
-// api/evaluate-proposal.js
-// Endpoint: POST /api/evaluate-proposal
-// Registra una propuesta de sustitución/optimización enviada desde el dashboard.
-// NOTA: por ahora solo genera un ID y devuelve confirmación (mock).
-// Cuando conectemos el motor madre ARKON, acá va la llamada real al motor de inferencia.
+import { createClient } from '@supabase/supabase-js';
 
-export default function handler(req, res) {
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
     return res.status(405).json({ success: false, mensaje: 'Método no permitido' });
@@ -16,16 +17,30 @@ export default function handler(req, res) {
     return res.status(400).json({ success: false, mensaje: 'Faltan datos de la propuesta (productId, propuesta)' });
   }
 
-  const idPropuesta = 'PROP-' + Date.now().toString(36).toUpperCase();
+  const { data, error } = await supabase
+    .from('trabajos')
+    .insert({
+      producto: productId,
+      material_id: productId,
+      contexto: propuesta,
+      estado: 'pendiente',
+    })
+    .select('id, estado, creado_en')
+    .single();
+
+  if (error) {
+    console.error('Error registrando trabajo en Supabase:', error.message);
+    return res.status(500).json({ success: false, mensaje: 'No se pudo registrar la propuesta' });
+  }
 
   return res.status(200).json({
     success: true,
-    mensaje: 'Propuesta registrada en el motor de inferencia de ARKON.',
+    mensaje: 'Propuesta registrada como trabajo pendiente en ARKON.',
     propuesta: {
-      idPropuesta,
+      idPropuesta: data.id,
       productId,
-      propuesta,
-      fecha: new Date().toISOString()
-    }
+      estado: data.estado,
+      fecha: data.creado_en,
+    },
   });
 }
