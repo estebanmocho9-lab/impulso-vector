@@ -1467,12 +1467,7 @@ export default function ArkonVisual() {
       }
     }
 
-    function analizarDesdeCatalogo(id: string) {
-      const sel = document.getElementById('global-product-selector') as HTMLSelectElement | null;
-      if (sel) sel.value = id;
-      loadProductDetail(id);
-      switchNav('analysis');
-    }
+    
 
     function agregarProyecto() {
       const tbody = document.getElementById('projects-table-body');
