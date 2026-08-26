@@ -13,15 +13,25 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const response = await fetch(`${bridge}/analizar`, {
+    const materialId = String(body.materialId || '').trim();
+
+    if (!materialId) {
+      return NextResponse.json(
+        { ok: false, error: 'materialId es obligatorio.' },
+        { status: 400 }
+      );
+    }
+
+    const response = await fetch(`${bridge}/api/neural-analysis`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { 'X-ARKON-TOKEN': token } : {}),
       },
       body: JSON.stringify({
-        materialId: body.materialId,
-        tipoProducto: body.tipoProducto,
+        materialId,
+        contexto: 'general',
+        estado: body.estado,
       }),
       cache: 'no-store',
     });
