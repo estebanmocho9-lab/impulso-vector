@@ -174,12 +174,12 @@ const BODY_HTML = `
         <!-- BARRA DE PRODUCTO ACTUAL ETIQUETA SUPERIOR -->
         <div class="glass-card rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-cyan-500/30">
           <div class="flex items-center space-x-4 flex-wrap gap-y-2">
-            <h3 class="text-lg font-extrabold text-white tracking-tight">PLACA ANTIHUMEDAD DE YESO CERÁMICO 12,5 mm</h3>
+            <h3 id="analysis-product-title" class="text-lg font-extrabold text-white tracking-tight">PLACA ANTIHUMEDAD DE YESO CERÁMICO 12,5 mm</h3>
             <div class="flex items-center space-x-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-xs font-medium text-emerald-400">
               <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
               <span>Producto Analizado</span>
             </div>
-            <span class="text-xs text-slate-400 hidden md:inline">Información suficiente para análisis y simulación</span>
+            <span id="analysis-product-context" class="text-xs text-slate-400 hidden md:inline">Información suficiente para análisis y simulación</span>
           </div>
 
           <div class="flex items-center space-x-3">
@@ -1374,6 +1374,12 @@ export default function ArkonVisual() {
     function updateUIWithProduct(p: any) {
       const selector = document.getElementById('global-product-selector') as HTMLSelectElement | null;
       if (selector) selector.value = p.id;
+
+      // Actualizar título y contexto con datos reales del producto
+      const titleEl = document.getElementById('analysis-product-title');
+      if (titleEl && p.nombre) titleEl.textContent = p.nombre.toUpperCase();
+      const ctxEl = document.getElementById('analysis-product-context');
+      if (ctxEl) ctxEl.textContent = p.categoria || 'Sin categoría asignada';
       const compContent = document.getElementById('comparator-content');
       if (compContent && p.alternativas) {
         compContent.innerHTML = p.alternativas.map((alt: any) => `
@@ -1467,7 +1473,33 @@ export default function ArkonVisual() {
       }
     }
 
-    
+    async function analizarDesdeCatalogo(id: string) {
+      const sel = document.getElementById('global-product-selector') as HTMLSelectElement | null;
+      if (sel) sel.value = id;
+      loadProductDetail(id);
+      switchNav('analysis');
+
+      const tipoProductoMap: Record<string, string> = {
+        'MA.001': 'placa_antihumedad',
+      };
+      const tipoProducto = tipoProductoMap[id];
+      if (!tipoProducto) {
+        alert('Este producto todavia no tiene un tipo asignado para el motor real. Por ahora solo MA.001 esta conectado.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/arkon-analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ materialId: id, tipoProducto }),
+        });
+        const data = await res.json();
+        alert('RESULTADO REAL DEL MOTOR:\n\n' + JSON.stringify(data, null, 2));
+      } catch (e: any) {
+        alert('Error conectando con el motor real: ' + e.message);
+      }
+    }
 
     function agregarProyecto() {
       const tbody = document.getElementById('projects-table-body');
