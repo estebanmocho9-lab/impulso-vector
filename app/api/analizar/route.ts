@@ -4,9 +4,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Puerta de entrada web al motor REAL de ARKON.
- * ARKON no se modifica desde este proyecto. La app web solamente envía
- * materialId + contexto al bridge público de ARKON.
+ * Entrada pública de Impulso Vector al motor REAL de ARKON.
+ * No modifica ARKON ni las neuronas: solamente transporta el materialId
+ * hasta el gateway público de ARKON y devuelve su resultado.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -18,21 +18,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Falta materialId' }, { status: 400 });
     }
 
-    const bridgeUrl = process.env.ARKON_BRIDGE_URL?.replace(/\/$/, '');
-    const bridgeToken = process.env.ARKON_BRIDGE_TOKEN;
+    // El bridge público de la demo es estable y no depende de un túnel temporal.
+    // Se permite sobreescribirlo por entorno, pero nunca volver a un túnel viejo.
+    const configuredBridge = process.env.ARKON_BRIDGE_URL?.trim().replace(/\/$/, '');
+    const bridgeUrl = configuredBridge && !configuredBridge.includes('trycloudflare.com')
+      ? configuredBridge
+      : 'https://arkon-x951.onrender.com';
 
-    if (!bridgeUrl) {
-      return NextResponse.json({ ok: false, error: 'ARKON_BRIDGE_URL no está configurada en Vercel' }, { status: 503 });
-    }
-    if (!bridgeToken) {
-      return NextResponse.json({ ok: false, error: 'ARKON_BRIDGE_TOKEN no está configurado en Vercel' }, { status: 503 });
-    }
+    const bridgeToken = process.env.ARKON_BRIDGE_TOKEN?.trim();
 
     const response = await fetch(`${bridgeUrl}/api/neural-analysis`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-ARKON-TOKEN': bridgeToken,
+        ...(bridgeToken ? { 'X-ARKON-TOKEN': bridgeToken } : {}),
       },
       cache: 'no-store',
       body: JSON.stringify({ materialId, contexto, estado: body.estado }),
