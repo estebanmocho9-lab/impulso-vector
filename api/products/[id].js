@@ -12,26 +12,33 @@ export default async function handler(req, res) {
   }
 
   const { id } = req.query;
+  const numericId = Number(id);
 
-  let { data: producto, error } = await supabase
-    .from('productos')
-    .select('id, nombre, contexto, composicion, material_id, activo, created_at')
-    .eq('material_id', id)
-    .eq('activo', true)
-    .limit(1)
-    .maybeSingle();
+  let producto = null;
+  let error = null;
 
+  if (Number.isInteger(numericId)) {
+    const resp = await supabase
+      .from('productos')
+      .select('id, nombre, contexto, composicion, material_id, material_ids, activo, created_at')
+      .eq('id', numericId)
+      .eq('activo', true)
+      .maybeSingle();
+    producto = resp.data;
+    error = resp.error;
+  }
+
+  // Compatibilidad con el selector anterior que podía enviar material_id.
   if (!producto && !error) {
-    const numericId = Number(id);
-    if (!Number.isNaN(numericId)) {
-      const resp = await supabase
-        .from('productos')
-        .select('id, nombre, contexto, composicion, material_id, activo, created_at')
-        .eq('id', numericId)
-        .maybeSingle();
-      producto = resp.data;
-      error = resp.error;
-    }
+    const resp = await supabase
+      .from('productos')
+      .select('id, nombre, contexto, composicion, material_id, material_ids, activo, created_at')
+      .eq('material_id', id)
+      .eq('activo', true)
+      .limit(1)
+      .maybeSingle();
+    producto = resp.data;
+    error = resp.error;
   }
 
   if (error) {
@@ -43,25 +50,20 @@ export default async function handler(req, res) {
     return res.status(404).json({ success: false, mensaje: 'Producto no encontrado en el catálogo de ARKON' });
   }
 
-  let componentesReales = [];
-  if (producto.material_id) {
-    const { data: comps } = await supabase
-      .from('componentes_materiales')
-      .select('nombre_componente, porcentaje_texto, porcentaje_min, porcentaje_max')
-      .eq('id_material', producto.material_id);
-    componentesReales = comps || [];
-  }
+  const materialIds = Array.from(new Set([
+    ...(Array.isArray(producto.material_ids) ? producto.material_ids : []),
+    ...(producto.material_id ? [producto.material_id] : []),
+  ].map((value) => String(value).trim()).filter(Boolean)));
 
   return res.status(200).json({
     success: true,
     product: {
-      id: producto.material_id || String(producto.id),
+      id: String(producto.id),
       nombre: producto.nombre,
-      categoria: producto.contexto || 'Sin categoría asignada',
+      categoria: producto.contexto || 'general',
       estado: 'Disponible',
+      materialIds,
       composicion: producto.composicion || null,
-      componentes: componentesReales,
-      alternativas: [],
     },
   });
 }
