@@ -22,18 +22,10 @@ function getStatus() {
   return document.querySelector('#analysis-live-status') as HTMLElement | null;
 }
 
-function valueOrMissing(value: unknown, formatter?: (value: number) => string) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 'Falta datos';
-  return formatter ? formatter(n) : String(value);
-}
-
 function ensureRealShell() {
   const view = getView();
   if (!view) return null;
 
-  // The old analysis screen is a visual demo. Keep only the real product selector
-  // and replace every hard-coded analysis result with a clean real-data shell.
   Array.from(view.children).forEach((child, index) => {
     if (index > 0 && (child as HTMLElement).id !== 'arkon-real-result') {
       (child as HTMLElement).hidden = true;
@@ -49,11 +41,6 @@ function ensureRealShell() {
       textOf(el) === 'producto analizado' || textOf(el) === 'producto seleccionado'
     );
     if (badge) badge.textContent = 'Esperando análisis';
-
-    const description = Array.from(header.querySelectorAll('span')).find((el) =>
-      textOf(el).includes('información suficiente')
-    );
-    if (description) description.textContent = 'Los datos se mostrarán únicamente cuando existan en ARKON';
 
     let status = document.querySelector('#analysis-live-status') as HTMLElement | null;
     if (!status) {
@@ -93,77 +80,97 @@ function resetAnalysisView(message = 'Seleccioná un producto y presioná Analiz
   `;
 }
 
-function paintResult(result: any, materialId: string, productName?: string) {
+function renderMaterial(item: any) {
+  const result = item?.resultado || {};
+  const indice = Number(result?.indice ?? result?.indiceGlobal);
+  const cobertura = Number(result?.cobertura);
+  const causas = Array.isArray(result?.causas) ? result.causas : [];
+  const soluciones = Array.isArray(result?.soluciones) ? result.soluciones : [];
+  const triz = Array.isArray(result?.triz) ? result.triz : [];
+  const finiteIndice = Number.isFinite(indice);
+  const finiteCobertura = Number.isFinite(cobertura);
+
+  const list = (items: any[]) => items.length
+    ? `<ul class="space-y-2">${items.map((value) => `<li class="text-xs text-slate-300 border-b border-slate-800 pb-2">${escapeHtml(String(value))}</li>`).join('')}</ul>`
+    : `<div class="text-xs text-slate-500">Sin datos devueltos por ARKON.</div>`;
+
+  if (!item?.ok) {
+    return `
+      <div class="rounded-xl border border-rose-500/30 bg-rose-500/5 p-4">
+        <div class="text-[10px] font-mono uppercase tracking-widest text-rose-400">Material con error</div>
+        <div class="mt-1 text-sm font-semibold text-white">${escapeHtml(String(item?.materialId || 'sin ID'))}</div>
+        <div class="mt-2 text-xs text-rose-200">${escapeHtml(String(item?.error || 'ARKON no devolvió resultado.'))}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="rounded-xl border border-slate-800 p-4 space-y-4">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <div class="text-[10px] font-mono uppercase tracking-widest text-cyan-400">Material analizado por ARKON</div>
+          <div class="mt-1 text-sm font-semibold text-white">${escapeHtml(String(item.materialId))}</div>
+        </div>
+        <div class="text-right">
+          <div class="text-[9px] uppercase text-slate-500">Índice</div>
+          <div class="text-lg font-semibold text-cyan-400">${finiteIndice ? `${indice.toFixed(1)}/100` : 'Falta datos'}</div>
+          <div class="text-[9px] text-slate-500">${finiteCobertura ? `Cobertura ${(cobertura * 100).toFixed(1)}%` : 'Cobertura sin datos'}</div>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="rounded-lg border border-slate-800 p-3"><div class="text-[9px] uppercase text-slate-500 mb-2">Causas</div>${list(causas)}</div>
+        <div class="rounded-lg border border-slate-800 p-3"><div class="text-[9px] uppercase text-slate-500 mb-2">Soluciones</div>${list(soluciones)}</div>
+        <div class="rounded-lg border border-slate-800 p-3"><div class="text-[9px] uppercase text-slate-500 mb-2">TRIZ</div>${list(triz)}</div>
+      </div>
+    </div>
+  `;
+}
+
+function paintResult(result: any, productName: string, productId: string) {
   const panel = ensureRealShell();
   if (!panel) return;
 
-  const payload = result?.resultado ?? result ?? {};
-  const indice = payload?.indice;
-  const cobertura = payload?.cobertura;
-  const causas = Array.isArray(payload?.causas) ? payload.causas : [];
-  const soluciones = Array.isArray(payload?.soluciones) ? payload.soluciones : [];
-  const triz = Array.isArray(payload?.triz) ? payload.triz : [];
-  const resultadoId = payload?.resultado_id ?? result?.resultado_id ?? 'Falta datos';
+  const materiales = Array.isArray(result?.materiales) ? result.materiales : [];
+  const indice = Number(result?.indice);
+  const cobertura = Number(result?.cobertura);
+  const resumen = result?.resumen || {};
+  const materialIds = Array.isArray(result?.producto?.materialIds) ? result.producto.materialIds : [];
 
   const status = getStatus();
   if (status) {
-    const coverageText = Number.isFinite(Number(cobertura))
-      ? `${(Number(cobertura) * 100).toFixed(1)}%`
-      : 'Falta datos';
-    status.textContent = `ARKON REAL · ${materialId} · resultado ${resultadoId} · cobertura ${coverageText}`;
+    status.textContent = `ARKON REAL · producto ${productId} · ${resumen.materialesAnalizados ?? 0}/${resumen.materialesSolicitados ?? materialIds.length} materiales analizados`;
     status.className = 'text-[10px] font-mono text-emerald-400 mt-2';
   }
 
-  const list = (items: any[]) => items.length
-    ? `<ul class="space-y-2">${items.map((item) => `<li class="text-xs text-slate-300 border-b border-slate-800 pb-2">${escapeHtml(String(item))}</li>`).join('')}</ul>`
-    : `<div class="text-xs text-amber-300">Falta datos</div>`;
+  const finiteIndice = Number.isFinite(indice);
+  const finiteCobertura = Number.isFinite(cobertura);
 
   panel.innerHTML = `
     <div class="space-y-6">
       <div>
         <div class="text-[10px] font-mono uppercase tracking-widest text-cyan-400">Resultado real de ARKON</div>
-        <div class="mt-1 text-lg font-semibold text-white">${escapeHtml(productName || materialId)}</div>
-        <div class="mt-1 text-[10px] font-mono text-slate-500">Material: ${escapeHtml(materialId)} · ID resultado: ${escapeHtml(String(resultadoId))}</div>
+        <div class="mt-1 text-lg font-semibold text-white">${escapeHtml(productName || result?.producto?.nombre || productId)}</div>
+        <div class="mt-1 text-[10px] font-mono text-slate-500">Producto: ${escapeHtml(productId)} · Materiales vinculados: ${escapeHtml(materialIds.join(', ') || 'ninguno')}</div>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div class="rounded-xl border border-slate-800 p-4">
-          <div class="text-[9px] uppercase text-slate-500">Índice ARKON</div>
-          <div class="mt-1 text-xl font-semibold text-cyan-400">${valueOrMissing(indice, (n) => `${n.toFixed(1)}/100`)}</div>
-        </div>
-        <div class="rounded-xl border border-slate-800 p-4">
-          <div class="text-[9px] uppercase text-slate-500">Cobertura real</div>
-          <div class="mt-1 text-xl font-semibold">${valueOrMissing(cobertura, (n) => `${(n * 100).toFixed(1)}%`)}</div>
-        </div>
-        <div class="rounded-xl border border-slate-800 p-4">
-          <div class="text-[9px] uppercase text-slate-500">TRIZ</div>
-          <div class="mt-1 text-xl font-semibold">${triz.length ? triz.length : 'Falta datos'}</div>
-        </div>
+        <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Índice producto</div><div class="mt-1 text-xl font-semibold text-cyan-400">${finiteIndice ? `${indice.toFixed(1)}/100` : 'Falta datos'}</div></div>
+        <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Cobertura</div><div class="mt-1 text-xl font-semibold">${finiteCobertura ? `${(cobertura * 100).toFixed(1)}%` : 'Falta datos'}</div></div>
+        <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Materiales</div><div class="mt-1 text-xl font-semibold">${resumen.materialesAnalizados ?? 0}/${resumen.materialesSolicitados ?? materialIds.length}</div></div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="rounded-xl border border-slate-800 p-4">
-          <div class="text-[10px] font-mono uppercase text-slate-500 mb-3">Causas físicas</div>
-          ${list(causas)}
-        </div>
-        <div class="rounded-xl border border-slate-800 p-4">
-          <div class="text-[10px] font-mono uppercase text-slate-500 mb-3">Soluciones propuestas</div>
-          ${list(soluciones)}
-        </div>
-        <div class="rounded-xl border border-slate-800 p-4">
-          <div class="text-[10px] font-mono uppercase text-slate-500 mb-3">Principios TRIZ</div>
-          ${list(triz)}
-        </div>
+      <div class="space-y-4">
+        ${materiales.length ? materiales.map(renderMaterial).join('') : '<div class="text-xs text-amber-300">No hay resultados de materiales.</div>'}
       </div>
 
-      ${Number(cobertura) === 0 || !Number.isFinite(Number(cobertura))
-        ? '<div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-amber-300">Falta datos reales suficientes para producir un análisis. ARKON no inventó valores.</div>'
+      ${(resumen.materialesConError ?? 0) > 0
+        ? `<div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-amber-300">Hay ${resumen.materialesConError} material(es) que ARKON no pudo analizar. No se inventaron valores.</div>`
         : ''}
     </div>
   `;
 
-  (window as any).__ARKON_LAST_ANALYSIS__ = payload;
-  window.dispatchEvent(new CustomEvent('arkon:analysis-complete', { detail: payload }));
+  (window as any).__ARKON_LAST_ANALYSIS__ = result;
+  window.dispatchEvent(new CustomEvent('arkon:analysis-complete', { detail: result }));
 }
 
 function paintError(message: string) {
@@ -198,12 +205,12 @@ async function loadRealProduct(id: string) {
   return data.product;
 }
 
-async function runRealAnalysis(materialId: string) {
-  const id = String(materialId || '').trim();
+async function runRealAnalysis(productId: string) {
+  const id = String(productId || '').trim();
   ensureRealShell();
 
   if (!id) {
-    paintError('No se recibió un producto real para analizar.');
+    paintError('No se recibió el ID real del producto.');
     return;
   }
 
@@ -219,20 +226,15 @@ async function runRealAnalysis(materialId: string) {
 
     const status = getStatus();
     if (status) {
-      status.textContent = `Ejecutando ARKON REAL · ${id} · contexto ${product.categoria || 'Falta datos'}...`;
+      status.textContent = `Ejecutando ARKON REAL · ${id} · cargando materiales...`;
       status.className = 'text-[10px] font-mono text-cyan-400 mt-2';
     }
 
-    // The public Next.js route is the gateway to the real ARKON engine.
-    // It expects materialId/productId, not producto/material_id.
     const response = await fetch('/api/analizar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       cache: 'no-store',
-      body: JSON.stringify({
-        materialId: id,
-        contexto: product.categoria || 'general',
-      }),
+      body: JSON.stringify({ productId: id }),
     });
 
     const text = await response.text();
@@ -247,11 +249,11 @@ async function runRealAnalysis(materialId: string) {
       throw new Error(result?.error || `HTTP ${response.status}`);
     }
 
-    paintResult(result, id, product.nombre);
+    paintResult(result, product.nombre, id);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     paintError(message);
-    console.error('ARKON real analysis failed:', error);
+    console.error('ARKON real product analysis failed:', error);
   }
 }
 
@@ -303,15 +305,12 @@ export default function ArkonAnalysisConnector() {
       const inline = button.getAttribute('onclick') || '';
       const match = inline.match(/(?:analizarDesdeCatalogo|seleccionarYAnalizar)\(['"]([^'"]+)['"]\)/);
       const selector = document.querySelector('#global-product-selector') as HTMLSelectElement | null;
-      const materialId = match?.[1] || selector?.value || '';
+      const productId = match?.[1] || selector?.value || '';
 
-      if (materialId) {
+      if (productId) {
         const w = window as any;
-        if (typeof w.seleccionarYAnalizar === 'function') {
-          w.seleccionarYAnalizar(materialId);
-        } else if (typeof w.analizarDesdeCatalogo === 'function') {
-          w.analizarDesdeCatalogo(materialId);
-        }
+        if (typeof w.seleccionarYAnalizar === 'function') w.seleccionarYAnalizar(productId);
+        else if (typeof w.analizarDesdeCatalogo === 'function') w.analizarDesdeCatalogo(productId);
       }
     };
 
