@@ -21,8 +21,6 @@ function getSupabase() {
 }
 
 async function callArkon(materialId: string, estado?: string) {
-  // Esta es la entrada pública estable al gateway del motor ARKON.
-  // Impulso Vector no modifica ARKON ni sus neuronas.
   const configuredBridge = process.env.ARKON_BRIDGE_URL?.trim().replace(/\/$/, '');
   const bridgeUrl = configuredBridge && !configuredBridge.includes('trycloudflare.com')
     ? configuredBridge
@@ -89,23 +87,33 @@ export async function POST(req: NextRequest) {
     let product: ProductRow | null = null;
 
     if (productIdRaw !== undefined && productIdRaw !== null && String(productIdRaw).trim() !== '') {
-      const productId = Number(productIdRaw);
-      if (!Number.isInteger(productId)) {
-        return NextResponse.json({ ok: false, error: 'productId inválido.' }, { status: 400 });
-      }
-
+      const selector = String(productIdRaw).trim();
       const supabase = getSupabase();
-      const { data, error } = await supabase
-        .from('productos')
-        .select('id,nombre,contexto,material_id,material_ids,composicion')
-        .eq('id', productId)
-        .maybeSingle();
 
-      if (error) throw error;
-      if (!data) {
-        return NextResponse.json({ ok: false, error: `Producto ${productId} no encontrado.` }, { status: 404 });
+      if (/^\d+$/.test(selector)) {
+        const { data, error } = await supabase
+          .from('productos')
+          .select('id,nombre,contexto,material_id,material_ids,composicion')
+          .eq('id', Number(selector))
+          .maybeSingle();
+        if (error) throw error;
+        product = (data as ProductRow | null) || null;
+      } else {
+        const { data, error } = await supabase
+          .from('productos')
+          .select('id,nombre,contexto,material_id,material_ids,composicion')
+          .eq('material_id', selector)
+          .eq('activo', true)
+          .order('id', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (error) throw error;
+        product = (data as ProductRow | null) || null;
       }
-      product = data as ProductRow;
+
+      if (!product) {
+        return NextResponse.json({ ok: false, error: `Producto '${selector}' no encontrado.` }, { status: 404 });
+      }
     }
 
     const materialIds = product
@@ -126,17 +134,9 @@ export async function POST(req: NextRequest) {
       try {
         const resultado = await callArkon(materialId, estado);
         const payload = resultado?.resultado ?? resultado;
-        materiales.push({
-          materialId,
-          ok: true,
-          resultado: payload,
-        });
+        materiales.push({ materialId, ok: true, resultado: payload });
       } catch (error: any) {
-        materiales.push({
-          materialId,
-          ok: false,
-          error: error?.message || String(error),
-        });
+        materiales.push({ materialId, ok: false, error: error?.message || String(error) });
       }
     }
 
@@ -150,12 +150,21 @@ export async function POST(req: NextRequest) {
       }, { status: 502 });
     }
 
-    const pesos = exitosos.map((item) => weightFor(item.materialId, product || ({ composicion: null } as ProductRow), materialIds));
-    const pesoTotal = pesos.reduce((sum, value) => sum + value, 0) || exitosos.length;
-    const indices = exitosos.map((item) => numeric(item.resultado?.indice ?? item.resultado?.indiceGlobal));
-    const indicesValidos = indices.map((value, index) => value === null ? null : { value, weight: pesos[index] }).filter(Boolean) as { value: number; weight: number }[];
+    const pesos = exitosos.map((item) => weightFor(
+      item.materialId,
+      product || ({ composicion: null } as ProductRow),
+      materialIds,
+    ));
+    const indicesValidos = exitosos
+      .map((item, index) => {
+        const value = numeric(item.resultado?.indice ?? item.resultado?.indiceGlobal);
+        return value === null ? null : { value, weight: pesos[index] };
+      })
+      .filter(Boolean) as { value: number; weight: number }[];
+
     const indice = indicesValidos.length
-      ? indicesValidos.reduce((sum, item) => sum + item.value * item.weight, 0) / indicesValidos.reduce((sum, item) => sum + item.weight, 0)
+      ? indicesValidos.reduce((sum, item) => sum + item.value * item.weight, 0) /
+        indicesValidos.reduce((sum, item) => sum + item.weight, 0)
       : null;
 
     const coberturas = exitosos
