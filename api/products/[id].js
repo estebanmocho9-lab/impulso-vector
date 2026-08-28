@@ -20,7 +20,7 @@ export default async function handler(req, res) {
   if (Number.isInteger(numericId)) {
     const resp = await supabase
       .from('productos')
-      .select('id, nombre, contexto, composicion, material_id, material_ids, activo, created_at')
+      .select('id, nombre, contexto, composicion, material_id, activo, created_at')
       .eq('id', numericId)
       .eq('activo', true)
       .maybeSingle();
@@ -28,11 +28,10 @@ export default async function handler(req, res) {
     error = resp.error;
   }
 
-  // Compatibilidad con el selector anterior que podía enviar material_id.
   if (!producto && !error) {
     const resp = await supabase
       .from('productos')
-      .select('id, nombre, contexto, composicion, material_id, material_ids, activo, created_at')
+      .select('id, nombre, contexto, composicion, material_id, activo, created_at')
       .eq('material_id', id)
       .eq('activo', true)
       .limit(1)
@@ -50,10 +49,7 @@ export default async function handler(req, res) {
     return res.status(404).json({ success: false, mensaje: 'Producto no encontrado en el catálogo de ARKON' });
   }
 
-  const materialIds = Array.from(new Set([
-    ...(Array.isArray(producto.material_ids) ? producto.material_ids : []),
-    ...(producto.material_id ? [producto.material_id] : []),
-  ].map((value) => String(value).trim()).filter(Boolean)));
+  const materialId = producto.material_id ? String(producto.material_id).trim() : '';
 
   return res.status(200).json({
     success: true,
@@ -62,7 +58,7 @@ export default async function handler(req, res) {
       nombre: producto.nombre,
       categoria: producto.contexto || 'general',
       estado: 'Disponible',
-      materialIds,
+      materialId,
       composicion: producto.composicion || null,
     },
   });
