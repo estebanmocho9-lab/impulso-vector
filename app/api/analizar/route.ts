@@ -34,12 +34,7 @@ async function callArkon(materialId: string, estado?: string) {
       ...(bridgeToken ? { 'X-ARKON-TOKEN': bridgeToken } : {}),
     },
     cache: 'no-store',
-    body: JSON.stringify({
-      materialId,
-      // gateway.ts de ARKON valida actualmente contexto === 'general'.
-      contexto: 'general',
-      estado,
-    }),
+    body: JSON.stringify({ materialId, contexto: 'general', estado }),
   });
 
   const text = await response.text();
@@ -53,7 +48,6 @@ async function callArkon(materialId: string, estado?: string) {
   if (!response.ok || data?.ok === false) {
     throw new Error(data?.error || `ARKON respondió HTTP ${response.status}`);
   }
-
   return data;
 }
 
@@ -132,9 +126,13 @@ export async function POST(req: NextRequest) {
 
     for (const materialId of materialIds) {
       try {
-        const resultado = await callArkon(materialId, estado);
-        const payload = resultado?.resultado ?? resultado;
-        materiales.push({ materialId, ok: true, resultado: payload });
+        const arkon = await callArkon(materialId, estado);
+        materiales.push({
+          materialId,
+          ok: true,
+          resultado: arkon?.resultado ?? arkon,
+          respuestaArkon: arkon,
+        });
       } catch (error: any) {
         materiales.push({ materialId, ok: false, error: error?.message || String(error) });
       }
@@ -176,7 +174,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      fuente: 'ARKON_DAP_REAL',
+      fuente: 'ARKON_NEURAL_REAL',
       producto: product ? {
         id: product.id,
         nombre: product.nombre,
@@ -190,6 +188,7 @@ export async function POST(req: NextRequest) {
         materialesSolicitados: materialIds.length,
         materialesAnalizados: exitosos.length,
         materialesConError: materiales.length - exitosos.length,
+        respuestaNeuronalRecibida: exitosos.length > 0,
       },
     });
   } catch (error: any) {
