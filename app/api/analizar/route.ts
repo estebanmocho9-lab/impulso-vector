@@ -60,6 +60,15 @@ function numeric(value: unknown) {
   return Number.isFinite(n) ? n : null;
 }
 
+function normalizeCobertura(resultado: any) {
+  const coberturaPorc = numeric(resultado?.coberturaPorc);
+  if (coberturaPorc !== null) return coberturaPorc / 100;
+
+  const cobertura = numeric(resultado?.cobertura);
+  if (cobertura === null) return null;
+  return cobertura > 1 ? cobertura / 100 : cobertura;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -126,8 +135,19 @@ export async function POST(req: NextRequest) {
       }, { status: 502 });
     }
 
+    // ARKON no devuelve actualmente un "indice" global. No lo inventamos.
     const indice = numeric(resultado?.indice ?? resultado?.indiceGlobal);
-    const cobertura = numeric(resultado?.cobertura);
+    const cobertura = normalizeCobertura(resultado);
+    const neuronasActivadas = Array.isArray(resultado?.neuronasActivadas)
+      ? resultado.neuronasActivadas
+      : [];
+    const propiedadesConDatos = numeric(resultado?.propiedadesConDatos ?? resultado?.neuronasConDatos);
+    const propiedadesPendientes = Array.isArray(resultado?.propiedadesPendientes)
+      ? resultado.propiedadesPendientes
+      : [];
+    const totalNeuronas = numeric(resultado?.totalNeuronas);
+    const neuronasSinDatos = numeric(resultado?.neuronasSinDatos);
+    const confianzaPromedio = numeric(resultado?.confianzaPromedio);
 
     return NextResponse.json({
       ok: true,
@@ -137,14 +157,33 @@ export async function POST(req: NextRequest) {
         nombre: product.nombre,
         contexto: product.contexto || 'general',
         materialId,
+        materialIds: [materialId],
       } : null,
+      // Este campo solo existe si ARKON lo devuelve. No se calcula ni se inventa.
       indice,
+      indiceDisponible: indice !== null,
       cobertura,
-      materiales: [{ materialId, ok: true, resultado }],
+      coberturaPorc: cobertura === null ? null : cobertura * 100,
+      materiales: [{
+        materialId,
+        ok: true,
+        resultado,
+        neuronasActivadas,
+        neuronasConDatos: propiedadesConDatos,
+        neuronasSinDatos,
+        totalNeuronas,
+        confianzaPromedio,
+        propiedadesPendientes,
+      }],
       resumen: {
         materialesSolicitados: 1,
         materialesAnalizados: 1,
         materialesConError: 0,
+        neuronasConDatos: propiedadesConDatos,
+        neuronasSinDatos,
+        totalNeuronas,
+        confianzaPromedio,
+        propiedadesPendientes: propiedadesPendientes.length,
       },
     });
   } catch (error: any) {
