@@ -38,7 +38,7 @@ function ensureRealShell() {
     if (title) title.textContent = 'ANÁLISIS REAL DEL PRODUCTO';
 
     const badge = Array.from(header.querySelectorAll('span')).find((el) =>
-      textOf(el) === 'producto analizado' || textOf(el) === 'producto seleccionado'
+      ['producto analizado', 'producto seleccionado'].includes(textOf(el))
     );
     if (badge) badge.textContent = 'Esperando análisis';
 
@@ -80,19 +80,29 @@ function resetAnalysisView(message = 'Seleccioná un producto y presioná Analiz
   `;
 }
 
+function renderList(items: any[], emptyMessage = 'ARKON no devolvió datos para esta sección.') {
+  return items.length
+    ? `<ul class="space-y-2">${items.map((value) => `<li class="text-xs text-slate-300 border-b border-slate-800 pb-2">${escapeHtml(String(value))}</li>`).join('')}</ul>`
+    : `<div class="text-xs text-slate-500">${escapeHtml(emptyMessage)}</div>`;
+}
+
 function renderMaterial(item: any) {
   const result = item?.resultado || {};
   const indice = Number(result?.indice ?? result?.indiceGlobal);
-  const cobertura = Number(result?.cobertura);
-  const causas = Array.isArray(result?.causas) ? result.causas : [];
-  const soluciones = Array.isArray(result?.soluciones) ? result.soluciones : [];
-  const triz = Array.isArray(result?.triz) ? result.triz : [];
+  const coberturaPorc = Number(result?.coberturaPorc);
+  const coberturaRaw = Number(result?.cobertura);
+  const cobertura = Number.isFinite(coberturaPorc)
+    ? coberturaPorc
+    : (Number.isFinite(coberturaRaw) ? (coberturaRaw <= 1 ? coberturaRaw * 100 : coberturaRaw) : null);
+  const neuronas = Array.isArray(result?.neuronasActivadas) ? result.neuronasActivadas : [];
+  const pendientes = Array.isArray(result?.propiedadesPendientes) ? result.propiedadesPendientes : [];
+  const neuronasConDatos = Number(result?.neuronasConDatos ?? result?.propiedadesConDatos);
+  const neuronasSinDatos = Number(result?.neuronasSinDatos);
+  const totalNeuronas = Number(result?.totalNeuronas);
+  const confianza = Number(result?.confianzaPromedio);
   const finiteIndice = Number.isFinite(indice);
   const finiteCobertura = Number.isFinite(cobertura);
-
-  const list = (items: any[]) => items.length
-    ? `<ul class="space-y-2">${items.map((value) => `<li class="text-xs text-slate-300 border-b border-slate-800 pb-2">${escapeHtml(String(value))}</li>`).join('')}</ul>`
-    : `<div class="text-xs text-slate-500">Sin datos devueltos por ARKON.</div>`;
+  const finiteConfianza = Number.isFinite(confianza);
 
   if (!item?.ok) {
     return `
@@ -105,22 +115,56 @@ function renderMaterial(item: any) {
   }
 
   return `
-    <div class="rounded-xl border border-slate-800 p-4 space-y-4">
+    <div class="rounded-xl border border-slate-800 p-4 space-y-5">
       <div class="flex items-center justify-between gap-3">
         <div>
           <div class="text-[10px] font-mono uppercase tracking-widest text-cyan-400">Material analizado por ARKON</div>
           <div class="mt-1 text-sm font-semibold text-white">${escapeHtml(String(item.materialId))}</div>
+          <div class="mt-1 text-[10px] text-slate-500">Motor: ${escapeHtml(String(result?.motor || 'ARKON'))} · Contexto: ${escapeHtml(String(result?.contexto || 'general'))}</div>
         </div>
         <div class="text-right">
-          <div class="text-[9px] uppercase text-slate-500">Índice</div>
-          <div class="text-lg font-semibold text-cyan-400">${finiteIndice ? `${indice.toFixed(1)}/100` : 'Falta datos'}</div>
-          <div class="text-[9px] text-slate-500">${finiteCobertura ? `Cobertura ${(cobertura * 100).toFixed(1)}%` : 'Cobertura sin datos'}</div>
+          <div class="text-[9px] uppercase text-slate-500">Índice global</div>
+          <div class="text-lg font-semibold text-cyan-400">${finiteIndice ? `${indice.toFixed(1)}/100` : 'No devuelto'}</div>
+          <div class="text-[9px] text-slate-500">${finiteCobertura ? `Cobertura ${cobertura.toFixed(1)}%` : 'Cobertura no devuelta'}</div>
         </div>
       </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="rounded-lg border border-slate-800 p-3"><div class="text-[9px] uppercase text-slate-500">Con datos</div><div class="mt-1 text-lg font-semibold text-emerald-400">${Number.isFinite(neuronasConDatos) ? neuronasConDatos : '—'}</div></div>
+        <div class="rounded-lg border border-slate-800 p-3"><div class="text-[9px] uppercase text-slate-500">Sin datos</div><div class="mt-1 text-lg font-semibold text-amber-300">${Number.isFinite(neuronasSinDatos) ? neuronasSinDatos : '—'}</div></div>
+        <div class="rounded-lg border border-slate-800 p-3"><div class="text-[9px] uppercase text-slate-500">Total neuronas</div><div class="mt-1 text-lg font-semibold text-white">${Number.isFinite(totalNeuronas) ? totalNeuronas : neuronas.length}</div></div>
+        <div class="rounded-lg border border-slate-800 p-3"><div class="text-[9px] uppercase text-slate-500">Confianza</div><div class="mt-1 text-lg font-semibold text-cyan-300">${finiteConfianza ? `${(confianza * 100).toFixed(1)}%` : '—'}</div></div>
+      </div>
+
+      <div class="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-4">
+        <div class="text-[9px] uppercase tracking-widest text-cyan-400 mb-3">Propiedades activadas con datos reales</div>
+        ${neuronas.length ? `
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+            ${neuronas.map((n: any) => `
+              <div class="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="text-xs font-semibold text-white">${escapeHtml(String(n?.propertyName || n?.neuronId || 'Propiedad'))}</div>
+                  <div class="text-xs font-mono text-cyan-300">${Number.isFinite(Number(n?.valorCompuesto)) ? Number(n.valorCompuesto).toFixed(2) : '—'}</div>
+                </div>
+                <div class="mt-1 text-[9px] font-mono text-slate-500">${escapeHtml(String(n?.neuronId || ''))} · confianza ${Number.isFinite(Number(n?.confianza)) ? `${(Number(n.confianza) * 100).toFixed(1)}%` : '—'}</div>
+              </div>
+            `).join('')}
+          </div>
+        ` : '<div class="text-xs text-slate-500">ARKON no devolvió neuronas activadas.</div>'}
+      </div>
+
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div class="rounded-lg border border-slate-800 p-3"><div class="text-[9px] uppercase text-slate-500 mb-2">Causas</div>${list(causas)}</div>
-        <div class="rounded-lg border border-slate-800 p-3"><div class="text-[9px] uppercase text-slate-500 mb-2">Soluciones</div>${list(soluciones)}</div>
-        <div class="rounded-lg border border-slate-800 p-3"><div class="text-[9px] uppercase text-slate-500 mb-2">TRIZ</div>${list(triz)}</div>
+        <div class="rounded-lg border border-slate-800 p-3"><div class="text-[9px] uppercase text-slate-500 mb-2">Causas</div><div class="text-xs text-slate-500">ARKON no devolvió causas en este endpoint. No se inventan.</div></div>
+        <div class="rounded-lg border border-slate-800 p-3"><div class="text-[9px] uppercase text-slate-500 mb-2">Soluciones</div><div class="text-xs text-slate-500">ARKON no devolvió soluciones en este endpoint. No se inventan.</div></div>
+        <div class="rounded-lg border border-slate-800 p-3"><div class="text-[9px] uppercase text-slate-500 mb-2">TRIZ</div><div class="text-xs text-slate-500">ARKON no devolvió TRIZ en este endpoint. No se inventa.</div></div>
+      </div>
+
+      <div class="rounded-lg border border-slate-800 p-4">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <div class="text-[9px] uppercase tracking-widest text-slate-500">Propiedades pendientes declaradas por ARKON</div>
+          <div class="text-xs font-mono text-amber-300">${pendientes.length}</div>
+        </div>
+        ${renderList(pendientes, 'No hay propiedades pendientes declaradas.')}
       </div>
     </div>
   `;
@@ -132,9 +176,16 @@ function paintResult(result: any, productName: string, productId: string) {
 
   const materiales = Array.isArray(result?.materiales) ? result.materiales : [];
   const indice = Number(result?.indice);
-  const cobertura = Number(result?.cobertura);
+  const coberturaPorc = Number(result?.coberturaPorc);
+  const coberturaRaw = Number(result?.cobertura);
+  const cobertura = Number.isFinite(coberturaPorc)
+    ? coberturaPorc
+    : (Number.isFinite(coberturaRaw) ? (coberturaRaw <= 1 ? coberturaRaw * 100 : coberturaRaw) : null);
   const resumen = result?.resumen || {};
-  const materialIds = Array.isArray(result?.producto?.materialIds) ? result.producto.materialIds : [];
+  const productMaterialId = result?.producto?.materialId ? String(result.producto.materialId) : '';
+  const materialIds = Array.isArray(result?.producto?.materialIds) && result.producto.materialIds.length
+    ? result.producto.materialIds
+    : (productMaterialId ? [productMaterialId] : []);
 
   const status = getStatus();
   if (status) {
@@ -154,9 +205,13 @@ function paintResult(result: any, productName: string, productId: string) {
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Índice producto</div><div class="mt-1 text-xl font-semibold text-cyan-400">${finiteIndice ? `${indice.toFixed(1)}/100` : 'Falta datos'}</div></div>
-        <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Cobertura</div><div class="mt-1 text-xl font-semibold">${finiteCobertura ? `${(cobertura * 100).toFixed(1)}%` : 'Falta datos'}</div></div>
+        <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Índice producto</div><div class="mt-1 text-xl font-semibold text-cyan-400">${finiteIndice ? `${indice.toFixed(1)}/100` : 'No devuelto por ARKON'}</div></div>
+        <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Cobertura real</div><div class="mt-1 text-xl font-semibold">${finiteCobertura ? `${cobertura.toFixed(1)}%` : 'No devuelta'}</div></div>
         <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Materiales</div><div class="mt-1 text-xl font-semibold">${resumen.materialesAnalizados ?? 0}/${resumen.materialesSolicitados ?? materialIds.length}</div></div>
+      </div>
+
+      <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs text-emerald-200">
+        Los valores mostrados debajo provienen directamente de la respuesta de ARKON. Si ARKON no devuelve un campo, la app lo deja explícitamente como no disponible y no fabrica un valor.
       </div>
 
       <div class="space-y-4">
