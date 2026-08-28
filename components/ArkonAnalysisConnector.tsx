@@ -104,6 +104,11 @@ function renderMaterial(item: any) {
     `;
   }
 
+  const respuestaArkon = item?.respuestaArkon;
+  const respuestaTexto = respuestaArkon
+    ? JSON.stringify(respuestaArkon, null, 2)
+    : '';
+
   return `
     <div class="rounded-xl border border-slate-800 p-4 space-y-4">
       <div class="flex items-center justify-between gap-3">
@@ -113,8 +118,8 @@ function renderMaterial(item: any) {
         </div>
         <div class="text-right">
           <div class="text-[9px] uppercase text-slate-500">Índice</div>
-          <div class="text-lg font-semibold text-cyan-400">${finiteIndice ? `${indice.toFixed(1)}/100` : 'Falta datos'}</div>
-          <div class="text-[9px] text-slate-500">${finiteCobertura ? `Cobertura ${(cobertura * 100).toFixed(1)}%` : 'Cobertura sin datos'}</div>
+          <div class="text-lg font-semibold text-cyan-400">${finiteIndice ? `${indice.toFixed(1)}/100` : 'Sin índice'}</div>
+          <div class="text-[9px] text-slate-500">${finiteCobertura ? `Cobertura ${(cobertura * 100).toFixed(1)}%` : 'Cobertura sin dato'}</div>
         </div>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -122,6 +127,12 @@ function renderMaterial(item: any) {
         <div class="rounded-lg border border-slate-800 p-3"><div class="text-[9px] uppercase text-slate-500 mb-2">Soluciones</div>${list(soluciones)}</div>
         <div class="rounded-lg border border-slate-800 p-3"><div class="text-[9px] uppercase text-slate-500 mb-2">TRIZ</div>${list(triz)}</div>
       </div>
+      ${!finiteIndice || (!causas.length && !soluciones.length && !triz.length)
+        ? `<details class="rounded-lg border border-cyan-500/20 bg-slate-950/50 p-3">
+            <summary class="cursor-pointer text-[9px] font-mono uppercase tracking-widest text-cyan-400">Respuesta neuronal real recibida</summary>
+            <pre class="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-[10px] leading-5 text-slate-300">${escapeHtml(respuestaTexto || 'ARKON respondió sin payload visible.')}</pre>
+          </details>`
+        : ''}
     </div>
   `;
 }
@@ -154,8 +165,8 @@ function paintResult(result: any, productName: string, productId: string) {
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Índice producto</div><div class="mt-1 text-xl font-semibold text-cyan-400">${finiteIndice ? `${indice.toFixed(1)}/100` : 'Falta datos'}</div></div>
-        <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Cobertura</div><div class="mt-1 text-xl font-semibold">${finiteCobertura ? `${(cobertura * 100).toFixed(1)}%` : 'Falta datos'}</div></div>
+        <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Índice producto</div><div class="mt-1 text-xl font-semibold text-cyan-400">${finiteIndice ? `${indice.toFixed(1)}/100` : 'Sin índice'}</div></div>
+        <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Cobertura</div><div class="mt-1 text-xl font-semibold">${finiteCobertura ? `${(cobertura * 100).toFixed(1)}%` : 'Sin dato'}</div></div>
         <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Materiales</div><div class="mt-1 text-xl font-semibold">${resumen.materialesAnalizados ?? 0}/${resumen.materialesSolicitados ?? materialIds.length}</div></div>
       </div>
 
