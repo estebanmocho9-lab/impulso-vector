@@ -9,7 +9,6 @@ type ProductRow = {
   nombre: string;
   contexto: string | null;
   material_id: string | null;
-  material_ids: string[] | null;
   composicion: Record<string, unknown> | null;
 };
 
@@ -36,7 +35,6 @@ async function callArkon(materialId: string, estado?: string) {
     cache: 'no-store',
     body: JSON.stringify({
       materialId,
-      // gateway.ts de ARKON valida actualmente contexto === 'general'.
       contexto: 'general',
       estado,
     }),
@@ -57,22 +55,6 @@ async function callArkon(materialId: string, estado?: string) {
   return data;
 }
 
-function uniqueMaterialIds(product: ProductRow) {
-  return Array.from(new Set([
-    ...(Array.isArray(product.material_ids) ? product.material_ids : []),
-    ...(product.material_id ? [product.material_id] : []),
-  ].map((value) => String(value).trim()).filter(Boolean)));
-}
-
-function weightFor(materialId: string, product: ProductRow, materialIds: string[]) {
-  const composition = product.composicion;
-  if (composition && typeof composition === 'object') {
-    const direct = Number((composition as any)[materialId]);
-    if (Number.isFinite(direct) && direct > 0) return direct;
-  }
-  return 1 / Math.max(materialIds.length, 1);
-}
-
 function numeric(value: unknown) {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
@@ -83,25 +65,26 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const productIdRaw = body.productId ?? body.product_id;
     const materialIdRaw = body.materialId ?? body.material_id;
+    const supabase = getSupabase();
 
     let product: ProductRow | null = null;
 
     if (productIdRaw !== undefined && productIdRaw !== null && String(productIdRaw).trim() !== '') {
       const selector = String(productIdRaw).trim();
-      const supabase = getSupabase();
 
       if (/^\d+$/.test(selector)) {
         const { data, error } = await supabase
           .from('productos')
-          .select('id,nombre,contexto,material_id,material_ids,composicion')
+          .select('id,nombre,contexto,material_id,composicion')
           .eq('id', Number(selector))
+          .eq('activo', true)
           .maybeSingle();
         if (error) throw error;
         product = (data as ProductRow | null) || null;
       } else {
         const { data, error } = await supabase
           .from('productos')
-          .select('id,nombre,contexto,material_id,material_ids,composicion')
+          .select('id,nombre,contexto,material_id,composicion')
           .eq('material_id', selector)
           .eq('activo', true)
           .order('id', { ascending: true })
@@ -116,63 +99,35 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const materialIds = product
-      ? uniqueMaterialIds(product)
-      : (materialIdRaw ? [String(materialIdRaw).trim()] : []);
+    const materialId = product?.material_id
+      ? String(product.material_id).trim()
+      : (materialIdRaw ? String(materialIdRaw).trim() : '');
 
-    if (!materialIds.length) {
+    if (!materialId) {
       return NextResponse.json({
         ok: false,
-        error: 'El producto no tiene materiales vinculados. Complete productos.material_ids antes de analizarlo.',
+        error: 'El producto no tiene material_id vinculado. Complete productos.material_id antes de analizarlo.',
       }, { status: 422 });
     }
 
     const estado = typeof body.estado === 'string' ? body.estado : undefined;
-    const materiales: any[] = [];
+    let resultado: any;
 
-    for (const materialId of materialIds) {
-      try {
-        const resultado = await callArkon(materialId, estado);
-        const payload = resultado?.resultado ?? resultado;
-        materiales.push({ materialId, ok: true, resultado: payload });
-      } catch (error: any) {
-        materiales.push({ materialId, ok: false, error: error?.message || String(error) });
-      }
-    }
-
-    const exitosos = materiales.filter((item) => item.ok);
-    if (!exitosos.length) {
+    try {
+      const respuestaArkon = await callArkon(materialId, estado);
+      resultado = respuestaArkon?.resultado ?? respuestaArkon;
+    } catch (error: any) {
       return NextResponse.json({
         ok: false,
-        error: 'ARKON no pudo analizar ninguno de los materiales vinculados.',
+        error: 'ARKON no pudo analizar el material vinculado.',
         producto: product ? { id: product.id, nombre: product.nombre, contexto: product.contexto } : null,
-        materiales,
+        materialId,
+        detalle: error?.message || String(error),
       }, { status: 502 });
     }
 
-    const pesos = exitosos.map((item) => weightFor(
-      item.materialId,
-      product || ({ composicion: null } as ProductRow),
-      materialIds,
-    ));
-    const indicesValidos = exitosos
-      .map((item, index) => {
-        const value = numeric(item.resultado?.indice ?? item.resultado?.indiceGlobal);
-        return value === null ? null : { value, weight: pesos[index] };
-      })
-      .filter(Boolean) as { value: number; weight: number }[];
-
-    const indice = indicesValidos.length
-      ? indicesValidos.reduce((sum, item) => sum + item.value * item.weight, 0) /
-        indicesValidos.reduce((sum, item) => sum + item.weight, 0)
-      : null;
-
-    const coberturas = exitosos
-      .map((item) => numeric(item.resultado?.cobertura))
-      .filter((value): value is number => value !== null);
-    const cobertura = coberturas.length
-      ? coberturas.reduce((sum, value) => sum + value, 0) / coberturas.length
-      : null;
+    const indice = numeric(resultado?.indice ?? resultado?.indiceGlobal);
+    const cobertura = numeric(resultado?.cobertura);
 
     return NextResponse.json({
       ok: true,
@@ -181,15 +136,15 @@ export async function POST(req: NextRequest) {
         id: product.id,
         nombre: product.nombre,
         contexto: product.contexto || 'general',
-        materialIds,
+        materialId,
       } : null,
       indice,
       cobertura,
-      materiales,
+      materiales: [{ materialId, ok: true, resultado }],
       resumen: {
-        materialesSolicitados: materialIds.length,
-        materialesAnalizados: exitosos.length,
-        materialesConError: materiales.length - exitosos.length,
+        materialesSolicitados: 1,
+        materialesAnalizados: 1,
+        materialesConError: 0,
       },
     });
   } catch (error: any) {
