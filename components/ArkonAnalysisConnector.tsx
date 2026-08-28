@@ -101,7 +101,7 @@ function renderMaterial(item: any) {
   const totalNeuronas = Number(result?.totalNeuronas);
   const confianza = Number(result?.confianzaPromedio);
   const finiteIndice = Number.isFinite(indice);
-  const finiteCobertura = Number.isFinite(cobertura);
+  const finiteCobertura = cobertura !== null && Number.isFinite(cobertura);
   const finiteConfianza = Number.isFinite(confianza);
 
   if (!item?.ok) {
@@ -125,7 +125,7 @@ function renderMaterial(item: any) {
         <div class="text-right">
           <div class="text-[9px] uppercase text-slate-500">Índice global</div>
           <div class="text-lg font-semibold text-cyan-400">${finiteIndice ? `${indice.toFixed(1)}/100` : 'No devuelto'}</div>
-          <div class="text-[9px] text-slate-500">${finiteCobertura ? `Cobertura ${cobertura.toFixed(1)}%` : 'Cobertura no devuelta'}</div>
+          <div class="text-[9px] text-slate-500">${finiteCobertura ? `Cobertura ${cobertura!.toFixed(1)}%` : 'Cobertura no devuelta'}</div>
         </div>
       </div>
 
@@ -194,7 +194,7 @@ function paintResult(result: any, productName: string, productId: string) {
   }
 
   const finiteIndice = Number.isFinite(indice);
-  const finiteCobertura = Number.isFinite(cobertura);
+  const finiteCobertura = cobertura !== null && Number.isFinite(cobertura);
 
   panel.innerHTML = `
     <div class="space-y-6">
@@ -206,7 +206,7 @@ function paintResult(result: any, productName: string, productId: string) {
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Índice producto</div><div class="mt-1 text-xl font-semibold text-cyan-400">${finiteIndice ? `${indice.toFixed(1)}/100` : 'No devuelto por ARKON'}</div></div>
-        <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Cobertura real</div><div class="mt-1 text-xl font-semibold">${finiteCobertura ? `${cobertura.toFixed(1)}%` : 'No devuelta'}</div></div>
+        <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Cobertura real</div><div class="mt-1 text-xl font-semibold">${finiteCobertura ? `${cobertura!.toFixed(1)}%` : 'No devuelta'}</div></div>
         <div class="rounded-xl border border-slate-800 p-4"><div class="text-[9px] uppercase text-slate-500">Materiales</div><div class="mt-1 text-xl font-semibold">${resumen.materialesAnalizados ?? 0}/${resumen.materialesSolicitados ?? materialIds.length}</div></div>
       </div>
 
