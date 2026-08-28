@@ -9,7 +9,6 @@ type ProductRow = {
   nombre: string;
   contexto: string | null;
   material_id: string | null;
-  material_ids: string[] | null;
   composicion: Record<string, unknown> | null;
   activo: boolean | null;
 };
@@ -32,7 +31,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
     const supabase = getSupabase();
     const { data, error } = await supabase
       .from('productos')
-      .select('id,nombre,contexto,material_id,material_ids,composicion,activo')
+      .select('id,nombre,contexto,material_id,composicion,activo')
       .eq('id', productId)
       .eq('activo', true)
       .maybeSingle();
@@ -43,10 +42,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
     }
 
     const product = data as ProductRow;
-    const materialIds = Array.from(new Set([
-      ...(Array.isArray(product.material_ids) ? product.material_ids : []),
-      ...(product.material_id ? [product.material_id] : []),
-    ].map((value) => String(value).trim()).filter(Boolean)));
+    const materialId = product.material_id ? String(product.material_id).trim() : '';
 
     return NextResponse.json({
       success: true,
@@ -55,7 +51,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
         nombre: product.nombre,
         categoria: product.contexto || 'general',
         contexto: product.contexto || 'general',
-        materialIds,
+        materialId,
         composicion: product.composicion || {},
       },
     });
