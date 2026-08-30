@@ -63,6 +63,37 @@ export default async function handler(req, res) {
       return res.status(arkonResponse.status).json(result);
     }
 
+    // ARKON REAL devuelve el diagnóstico integral bajo `diagnosticoIntegral`.
+    // Impulso Vector históricamente renderiza la misma información bajo
+    // `resultado`; exponemos ambas formas para que no se pierda ningún dato
+    // y para mantener el contrato de la interfaz sin inventar resultados.
+    const integral = result?.diagnosticoIntegral || {};
+    const activacion = result?.activacion || integral?.activacion || {};
+    const resumen = integral?.resumen || {};
+
+    result.resultado = {
+      activacion,
+      problemasDetectados: integral?.problemasDetectados || [],
+      anomalias: integral?.anomalias || [],
+      propiedadesPendientes: integral?.propiedadesPendientes || [],
+      mejoras: [
+        ...(integral?.soluciones?.reglas_mejora || []),
+        ...(integral?.soluciones?.mejoras || []),
+      ],
+      formulas: integral?.formulas || [],
+      crucesCientificos: integral?.cruces || [],
+      triz: integral?.triz || [],
+      analisisProblemas: integral?.analisisProblemas || [],
+      errores: result?.errores || [],
+      resumen,
+    };
+
+    // También dejamos `materiales` disponible como compatibilidad con
+    // versiones anteriores del conector, siempre con la respuesta real.
+    result.materiales = Array.isArray(result.materiales)
+      ? result.materiales
+      : [{ materialId, resultado: result.resultado }];
+
     return res.status(200).json(result);
   } catch (error) {
     console.error('Error en puente /api/analizar:', error);
