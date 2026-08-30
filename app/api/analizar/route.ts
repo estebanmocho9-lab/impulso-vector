@@ -19,54 +19,10 @@ function getSupabase() {
   return createClient(url, key);
 }
 
-async function callArkon(materialId: string, estado?: string) {
-  const configuredBridge = process.env.ARKON_BRIDGE_URL?.trim().replace(/\/$/, '');
-  const bridgeUrl = configuredBridge && !configuredBridge.includes('trycloudflare.com')
-    ? configuredBridge
-    : 'https://arkon-x951.onrender.com';
-  const bridgeToken = process.env.ARKON_BRIDGE_TOKEN?.trim();
-
-  const response = await fetch(`${bridgeUrl}/api/neural-analysis`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(bridgeToken ? { 'X-ARKON-TOKEN': bridgeToken } : {}),
-    },
-    cache: 'no-store',
-    body: JSON.stringify({
-      materialId,
-      contexto: 'general',
-      estado,
-    }),
-  });
-
-  const text = await response.text();
-  let data: any;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    data = { ok: false, error: text || `HTTP ${response.status}` };
-  }
-
-  if (!response.ok || data?.ok === false) {
-    throw new Error(data?.error || `ARKON respondió HTTP ${response.status}`);
-  }
-
-  return data;
-}
-
-function numeric(value: unknown) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-function normalizeCobertura(resultado: any) {
-  const coberturaPorc = numeric(resultado?.coberturaPorc);
-  if (coberturaPorc !== null) return coberturaPorc / 100;
-
-  const cobertura = numeric(resultado?.cobertura);
-  if (cobertura === null) return null;
-  return cobertura > 1 ? cobertura / 100 : cobertura;
+function getArkonUrl() {
+  const configured = process.env.ARKON_BRIDGE_URL?.trim().replace(/\/$/, '');
+  if (configured && !configured.includes('trycloudflare.com')) return configured;
+  return 'https://arkon-x951.onrender.com';
 }
 
 export async function POST(req: NextRequest) {
@@ -75,8 +31,8 @@ export async function POST(req: NextRequest) {
     const productIdRaw = body.productId ?? body.product_id;
     const productId = Number(String(productIdRaw ?? '').trim());
 
-    // La selección siempre representa un producto de public.productos.
-    // El material se obtiene exclusivamente de ese registro.
+    // La selección es SIEMPRE el producto de public.productos.
+    // El único material que se envía a ARKON sale de productos.material_id.
     if (!Number.isInteger(productId)) {
       return NextResponse.json({
         ok: false,
@@ -116,77 +72,68 @@ export async function POST(req: NextRequest) {
       }, { status: 422 });
     }
 
-    const estado = typeof body.estado === 'string' ? body.estado : undefined;
-    let resultado: any;
+    const bridgeUrl = getArkonUrl();
+    const token = process.env.ARKON_BRIDGE_TOKEN?.trim();
 
+    // IMPORTANTE: aquí llamamos al análisis COMPLETO de ARKON (/api/analizar),
+    // no al endpoint /api/neural-analysis que solamente devuelve activaciones de neuronas.
+    // Así Impulso Vector recibe fallas, mejoras, TRIZ y demás resultado científico real.
+    const response = await fetch(`${bridgeUrl}/api/analizar`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'X-ARKON-TOKEN': token } : {}),
+      },
+      cache: 'no-store',
+      body: JSON.stringify({
+        material_id: materialId,
+        contexto: product.contexto || 'general',
+        producto: product.nombre,
+      }),
+    });
+
+    const text = await response.text();
+    let arkon: any;
     try {
-      const respuestaArkon = await callArkon(materialId, estado);
-      resultado = respuestaArkon?.resultado ?? respuestaArkon;
-    } catch (error: any) {
+      arkon = JSON.parse(text);
+    } catch {
+      arkon = { ok: false, error: text || `HTTP ${response.status}` };
+    }
+
+    if (!response.ok || arkon?.ok === false) {
       return NextResponse.json({
         ok: false,
-        error: 'ARKON no pudo analizar el material vinculado.',
+        error: arkon?.error || `ARKON respondió HTTP ${response.status}`,
         producto: {
           id: product.id,
           nombre: product.nombre,
-          contexto: product.contexto,
+          contexto: product.contexto || 'general',
           materialId,
         },
-        detalle: error?.message || String(error),
-      }, { status: 502 });
+        detalle: arkon,
+      }, { status: response.status >= 400 && response.status < 600 ? response.status : 502 });
     }
 
-    const indice = numeric(resultado?.indice ?? resultado?.indiceGlobal);
-    const cobertura = normalizeCobertura(resultado);
-    const neuronasActivadas = Array.isArray(resultado?.neuronasActivadas)
-      ? resultado.neuronasActivadas
-      : [];
-    const propiedadesConDatos = numeric(resultado?.propiedadesConDatos ?? resultado?.neuronasConDatos);
-    const propiedadesPendientes = Array.isArray(resultado?.propiedadesPendientes)
-      ? resultado.propiedadesPendientes
-      : [];
-    const totalNeuronas = numeric(resultado?.totalNeuronas);
-    const neuronasSinDatos = numeric(resultado?.neuronasSinDatos);
-    const confianzaPromedio = numeric(resultado?.confianzaPromedio);
-
-    return NextResponse.json({
-      ok: true,
-      fuente: 'ARKON_DAP_REAL',
+    // El producto mostrado sigue siendo el seleccionado en public.productos.
+    // Los datos científicos del análisis vienen del motor ARKON.
+    const resultado = {
+      ...arkon,
       producto: {
+        ...(arkon.producto || {}),
         id: product.id,
         nombre: product.nombre,
         contexto: product.contexto || 'general',
         materialId,
-        materialIds: [materialId],
       },
-      indice,
-      indiceDisponible: indice !== null,
-      cobertura,
-      coberturaPorc: cobertura === null ? null : cobertura * 100,
-      materiales: [{
-        materialId,
-        ok: true,
-        resultado,
-        neuronasActivadas,
-        neuronasConDatos: propiedadesConDatos,
-        neuronasSinDatos,
-        totalNeuronas,
-        confianzaPromedio,
-        propiedadesPendientes,
-      }],
-      resumen: {
-        materialesSolicitados: 1,
-        materialesAnalizados: 1,
-        materialesConError: 0,
-        neuronasConDatos: propiedadesConDatos,
-        neuronasSinDatos,
-        totalNeuronas,
-        confianzaPromedio,
-        propiedadesPendientes: propiedadesPendientes.length,
-      },
-    });
+      fuente: 'ARKON_DAP_REAL',
+    };
+
+    return NextResponse.json({
+      ok: true,
+      resultado,
+    }, { status: 200 });
   } catch (error: any) {
-    console.error('Error conectando producto con ARKON:', error);
+    console.error('Error conectando producto con el análisis completo de ARKON:', error);
     return NextResponse.json(
       { ok: false, error: error?.message || 'Error conectando con el motor ARKON' },
       { status: 502 }
