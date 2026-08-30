@@ -31,20 +31,21 @@ function firstMaterialResult(arkon: any) {
 
 function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
   const legacyResult = arkon?.resultado || {};
+  const legacyNested = legacyResult?.resultado || {};
   const materialResult = firstMaterialResult(arkon);
   const diagnostic = arkon?.diagnosticoIntegral || {};
-  const activacion = legacyResult?.activacion || materialResult?.activacion || materialResult || arkon?.activacion || {};
+  const activacion = legacyResult?.activacion || legacyNested?.activacion || materialResult?.activacion || materialResult || arkon?.activacion || {};
 
-  const errores = legacyResult?.errores ?? materialResult?.errores ?? arkon?.errores ?? [];
-  const mejoras = legacyResult?.mejoras ?? materialResult?.mejoras ?? diagnostic?.soluciones?.mejoras ?? [];
-  const reglasMejora = legacyResult?.reglasMejora ?? materialResult?.reglasMejora ?? diagnostic?.soluciones?.reglas_mejora ?? [];
-  const formulas = legacyResult?.formulas ?? materialResult?.formulas ?? diagnostic?.formulas ?? [];
-  const cruces = legacyResult?.cruces ?? materialResult?.cruces ?? diagnostic?.cruces ?? [];
-  const triz = legacyResult?.triz ?? materialResult?.triz ?? diagnostic?.triz ?? [];
-  const analisisProblemas = legacyResult?.analisisProblemas ?? materialResult?.analisisProblemas ?? diagnostic?.analisisProblemas ?? [];
-  const problemasDetectados = legacyResult?.problemasDetectados ?? diagnostic?.problemasDetectados ?? [];
-  const anomalias = legacyResult?.anomalias ?? materialResult?.anomalias ?? diagnostic?.anomalias ?? [];
-  const propiedadesPendientes = legacyResult?.propiedadesPendientes ?? materialResult?.propiedadesPendientes ?? diagnostic?.propiedadesPendientes ?? [];
+  const errores = legacyResult?.errores ?? legacyNested?.errores ?? materialResult?.errores ?? arkon?.errores ?? [];
+  const mejoras = legacyResult?.mejoras ?? legacyNested?.mejoras ?? materialResult?.mejoras ?? diagnostic?.soluciones?.mejoras ?? [];
+  const reglasMejora = legacyResult?.reglasMejora ?? legacyNested?.reglasMejora ?? materialResult?.reglasMejora ?? diagnostic?.soluciones?.reglas_mejora ?? [];
+  const formulas = legacyResult?.formulas ?? legacyNested?.formulas ?? materialResult?.formulas ?? diagnostic?.formulas ?? [];
+  const cruces = legacyResult?.cruces ?? legacyNested?.cruces ?? materialResult?.cruces ?? diagnostic?.cruces ?? [];
+  const triz = legacyResult?.triz ?? legacyNested?.triz ?? materialResult?.triz ?? diagnostic?.triz ?? [];
+  const analisisProblemas = legacyResult?.analisisProblemas ?? legacyNested?.analisisProblemas ?? materialResult?.analisisProblemas ?? diagnostic?.analisisProblemas ?? [];
+  const problemasDetectados = legacyResult?.problemasDetectados ?? legacyNested?.problemasDetectados ?? diagnostic?.problemasDetectados ?? [];
+  const anomalias = legacyResult?.anomalias ?? legacyNested?.anomalias ?? materialResult?.anomalias ?? diagnostic?.anomalias ?? [];
+  const propiedadesPendientes = legacyResult?.propiedadesPendientes ?? legacyNested?.propiedadesPendientes ?? materialResult?.propiedadesPendientes ?? diagnostic?.propiedadesPendientes ?? [];
 
   const producto = {
     id: product.id,
@@ -53,7 +54,11 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     materialId,
   };
 
-  const resultadoInterno = {
+  // IMPORTANTE: resultado es directo porque el frontend de Impulso Vector
+  // consume result.resultado.activacion, result.resultado.formulas, etc.
+  // La versión anterior introducía un segundo nivel resultado.resultado.resultado
+  // y dejaba la interfaz viendo 0/? aunque ARKON sí hubiera calculado los datos.
+  const resultado = {
     activacion,
     problemasDetectados,
     anomalias,
@@ -65,16 +70,17 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     cruces,
     triz,
     analisisProblemas,
-    inferencia: legacyResult?.inferencia ?? materialResult?.inferencia,
+    inferencia: legacyResult?.inferencia ?? legacyNested?.inferencia ?? materialResult?.inferencia,
   };
 
+  const coberturaBase = diagnostic?.cobertura || {};
   const diagnosticoIntegral = {
     ...(diagnostic || {}),
-    cobertura: diagnostic?.cobertura || {
-      neuronasConDatos: activacion?.neuronasConDatos ?? 0,
-      totalNeuronas: activacion?.totalNeuronas ?? 0,
-      coberturaPorc: activacion?.coberturaPorc ?? 0,
-      confianzaPromedio: activacion?.confianzaPromedio ?? 0,
+    cobertura: {
+      neuronasConDatos: coberturaBase?.neuronasConDatos ?? activacion?.neuronasConDatos ?? 0,
+      totalNeuronas: coberturaBase?.totalNeuronas ?? activacion?.totalNeuronas ?? 0,
+      coberturaPorc: coberturaBase?.coberturaPorc ?? activacion?.coberturaPorc ?? 0,
+      confianzaPromedio: coberturaBase?.confianzaPromedio ?? activacion?.confianzaPromedio ?? 0,
     },
     problemasDetectados,
     anomalias,
@@ -92,7 +98,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     fuente: arkon?.fuente || 'Supabase + Google Sheets NORMALIZACION',
     producto,
     diagnosticoIntegral,
-    resultado: { producto, resultado: resultadoInterno },
+    resultado,
     materiales: arkon?.materiales || [{ materialId, resultado: { ...activacion, errores, mejoras, reglasMejora, formulas, cruces, triz, analisisProblemas } }],
   };
 }
@@ -136,11 +142,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: arkon?.error || `ARKON respondió HTTP ${response.status}`, producto: { id: product.id, nombre: product.nombre, contexto: product.contexto || 'general', materialId }, detalle: arkon }, { status: response.status >= 400 && response.status < 600 ? response.status : 502 });
     }
 
-    // Algunas versiones desplegadas de ARKON devuelven el diagnóstico integral pero no exponen
-    // la activación completa. En ese caso recuperamos la activación REAL desde el endpoint
-    // neural-analysis y la fusionamos. No se inventa ningún dato.
     const normalized = normalizeArkon(arkon, product, materialId);
-    const activationPresent = Array.isArray(normalized.resultado.resultado.activacion?.neuronasActivadas);
+
+    // Si la respuesta integral no trae activación completa, recuperarla del
+    // endpoint real de activationEngine. Esto no inventa valores: reutiliza
+    // exactamente el cálculo de ARKON sobre NORMALIZACION.
+    const activationPresent = Array.isArray(normalized.resultado?.activacion?.neuronasActivadas) && normalized.resultado.activacion.neuronasActivadas.length > 0;
     if (!activationPresent) {
       try {
         const neuralResponse = await fetch(`${bridgeUrl}/api/neural-analysis`, {
@@ -150,14 +157,14 @@ export async function POST(req: NextRequest) {
         const neuralText = await neuralResponse.text();
         const neural = JSON.parse(neuralText);
         if (neuralResponse.ok && neural?.ok !== false && Array.isArray(neural?.neuronasActivadas)) {
-          normalized.resultado.resultado.activacion = neural;
+          normalized.resultado.activacion = neural;
           normalized.diagnosticoIntegral.cobertura = {
             neuronasConDatos: neural.neuronasConDatos,
             totalNeuronas: neural.totalNeuronas,
             coberturaPorc: neural.coberturaPorc,
             confianzaPromedio: neural.confianzaPromedio,
           };
-          normalized.materiales = [{ materialId, resultado: { ...neural, errores: normalized.resultado.resultado.errores, mejoras: normalized.resultado.resultado.mejoras, reglasMejora: normalized.resultado.resultado.reglasMejora, formulas: normalized.resultado.resultado.formulas, cruces: normalized.resultado.resultado.cruces, triz: normalized.resultado.resultado.triz, analisisProblemas: normalized.resultado.resultado.analisisProblemas } }];
+          normalized.materiales = [{ materialId, resultado: { ...neural, errores: normalized.resultado.errores, mejoras: normalized.resultado.mejoras, reglasMejora: normalized.resultado.reglasMejora, formulas: normalized.resultado.formulas, cruces: normalized.resultado.cruces, triz: normalized.resultado.triz, analisisProblemas: normalized.resultado.analisisProblemas } }];
         }
       } catch (fallbackError) {
         console.warn('ARKON activation fallback no disponible:', fallbackError);
