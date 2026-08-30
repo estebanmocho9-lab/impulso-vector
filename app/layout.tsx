@@ -9,10 +9,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es">
-      <body>
-        {children}
-        <script src="/arkon-real-analysis.js" defer />
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
