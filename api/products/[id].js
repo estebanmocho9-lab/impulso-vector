@@ -14,31 +14,19 @@ export default async function handler(req, res) {
   const { id } = req.query;
   const numericId = Number(id);
 
-  let producto = null;
-  let error = null;
-
-  if (Number.isInteger(numericId)) {
-    const resp = await supabase
-      .from('productos')
-      .select('id, nombre, contexto, composicion, material_id, activo, created_at')
-      .eq('id', numericId)
-      .eq('activo', true)
-      .maybeSingle();
-    producto = resp.data;
-    error = resp.error;
+  if (!Number.isInteger(numericId)) {
+    return res.status(400).json({
+      success: false,
+      mensaje: 'El endpoint de producto requiere el id numérico del registro en productos.',
+    });
   }
 
-  if (!producto && !error) {
-    const resp = await supabase
-      .from('productos')
-      .select('id, nombre, contexto, composicion, material_id, activo, created_at')
-      .eq('material_id', id)
-      .eq('activo', true)
-      .limit(1)
-      .maybeSingle();
-    producto = resp.data;
-    error = resp.error;
-  }
+  const { data: producto, error } = await supabase
+    .from('productos')
+    .select('id, nombre, contexto, composicion, material_id, activo, created_at')
+    .eq('id', numericId)
+    .eq('activo', true)
+    .maybeSingle();
 
   if (error) {
     console.error('Error consultando producto en Supabase:', error.message);
@@ -57,7 +45,7 @@ export default async function handler(req, res) {
       id: String(producto.id),
       nombre: producto.nombre,
       categoria: producto.contexto || 'general',
-      estado: 'Disponible',
+      estado: materialId ? 'Disponible' : 'Sin material_id',
       materialId,
       composicion: producto.composicion || null,
     },
