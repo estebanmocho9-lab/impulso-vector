@@ -7,11 +7,7 @@ function textOf(element: Element) {
 }
 
 function escapeHtml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 }
 
 function getView() {
@@ -27,9 +23,7 @@ function ensureRealShell() {
   if (!view) return null;
 
   Array.from(view.children).forEach((child, index) => {
-    if (index > 0 && (child as HTMLElement).id !== 'arkon-real-result') {
-      (child as HTMLElement).hidden = true;
-    }
+    if (index > 0 && (child as HTMLElement).id !== 'arkon-real-result') (child as HTMLElement).hidden = true;
   });
 
   const header = view.firstElementChild as HTMLElement | null;
@@ -59,7 +53,6 @@ function ensureRealShell() {
     panel.className = 'glass-card rounded-2xl border border-cyan-500/20 bg-slate-950/70 p-6';
     view.appendChild(panel);
   }
-
   return panel;
 }
 
@@ -71,63 +64,84 @@ function resetAnalysisView(message = 'Seleccioná un producto y presioná Analiz
     status.textContent = 'ARKON REAL · sin análisis ejecutado';
     status.className = 'text-[10px] font-mono text-slate-500 mt-2';
   }
-  panel.innerHTML = `
-    <div class="space-y-3">
-      <div class="text-[10px] font-mono uppercase tracking-widest text-slate-500">Datos reales</div>
-      <div class="text-lg font-semibold text-white">${escapeHtml(message)}</div>
-      <div class="text-xs text-slate-500">No se muestran valores de demostración.</div>
-    </div>
-  `;
+  panel.innerHTML = `<div class="space-y-3"><div class="text-[10px] font-mono uppercase tracking-widest text-slate-500">Análisis real</div><div class="text-lg font-semibold text-white">${escapeHtml(message)}</div><div class="text-xs text-slate-500">No se muestran propiedades, valores demostrativos ni estadísticas internas.</div></div>`;
 }
 
-function renderMaterial(item: any) {
-  if (!item?.ok) {
-    return `
-      <div class="rounded-xl border border-rose-500/30 bg-rose-500/5 p-4">
-        <div class="text-[10px] font-mono uppercase tracking-widest text-rose-400">Material con error</div>
-        <div class="mt-1 text-sm font-semibold text-white">${escapeHtml(String(item?.materialId || 'sin ID'))}</div>
-        <div class="mt-2 text-xs text-rose-200">${escapeHtml(String(item?.error || 'ARKON no devolvió resultado.'))}</div>
-      </div>
-    `;
+const ERROR_KEYS = ['errores', 'error', 'errors', 'problemas', 'anomalias', 'anomalías', 'inconsistencias', 'alertas', 'causas'];
+const IMPROVEMENT_KEYS = ['mejoras', 'mejora', 'soluciones', 'solucion', 'solutions', 'recomendaciones', 'oportunidades', 'acciones', 'accionesRecomendadas'];
+const FORMULA_KEYS = ['formulas', 'fórmulas', 'formulasPosibles', 'fórmulasPosibles', 'formulasAplicables', 'fórmulasAplicables', 'ecuaciones', 'ecuacionesPosibles', 'ecuacionesAplicables'];
+
+function keyMatches(key: string, keys: string[]) {
+  return keys.some((candidate) => candidate.toLowerCase() === key.toLowerCase());
+}
+
+function collectByKeys(value: any, keys: string[], found: any[] = [], seen = new Set<any>()) {
+  if (value === null || value === undefined || seen.has(value)) return found;
+  if (typeof value !== 'object') return found;
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectByKeys(item, keys, found, seen));
+    return found;
   }
 
-  const result = item?.resultado || {};
-  const neuronas = Array.isArray(result?.neuronasActivadas) ? result.neuronasActivadas : [];
+  for (const [key, child] of Object.entries(value)) {
+    if (keyMatches(key, keys)) found.push(child);
+    if (child && typeof child === 'object') collectByKeys(child, keys, found, seen);
+  }
+  return found;
+}
 
-  return `
-    <div class="rounded-xl border border-slate-800 p-4 space-y-4">
-      <div>
-        <div class="text-[10px] font-mono uppercase tracking-widest text-cyan-400">Material analizado por ARKON</div>
-        <div class="mt-1 text-sm font-semibold text-white">${escapeHtml(String(item.materialId))}</div>
-        <div class="mt-1 text-[10px] text-slate-500">Motor: ${escapeHtml(String(result?.motor || 'ARKON'))} · Contexto: ${escapeHtml(String(result?.contexto || 'general'))}</div>
-      </div>
+function flattenItems(value: any, output: string[] = []) {
+  if (value === null || value === undefined) return output;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    const text = String(value).trim();
+    if (text) output.push(text);
+    return output;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => flattenItems(item, output));
+    return output;
+  }
+  if (typeof value === 'object') {
+    for (const [key, child] of Object.entries(value)) {
+      if (child === null || child === undefined) continue;
+      if (typeof child === 'object') flattenItems(child, output);
+      else output.push(`${key}: ${String(child)}`);
+    }
+  }
+  return output;
+}
 
-      <div class="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-4">
-        <div class="text-[9px] uppercase tracking-widest text-cyan-400 mb-3">Propiedades devueltas por ARKON</div>
-        ${neuronas.length ? `
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-            ${neuronas.map((n: any) => `
-              <div class="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
-                <div class="flex items-center justify-between gap-3">
-                  <div class="text-xs font-semibold text-white">${escapeHtml(String(n?.propertyName || n?.neuronId || 'Propiedad'))}</div>
-                  <div class="text-xs font-mono text-cyan-300">${Number.isFinite(Number(n?.valorCompuesto)) ? Number(n.valorCompuesto).toFixed(2) : '—'}</div>
-                </div>
-                <div class="mt-1 text-[9px] font-mono text-slate-500">${escapeHtml(String(n?.neuronId || ''))}</div>
-              </div>
-            `).join('')}
-          </div>
-        ` : '<div class="text-xs text-slate-500">ARKON no devolvió propiedades con datos.</div>'}
-      </div>
-    </div>
-  `;
+function uniqueItems(values: string[]) {
+  return [...new Set(values.map((v) => v.trim()).filter(Boolean))];
+}
+
+function section(title: string, values: string[], tone: 'error' | 'improvement' | 'formula', empty: string) {
+  const styles = {
+    error: 'border-rose-500/30 bg-rose-500/5 text-rose-200',
+    improvement: 'border-emerald-500/30 bg-emerald-500/5 text-emerald-200',
+    formula: 'border-cyan-500/30 bg-cyan-500/5 text-cyan-100',
+  }[tone];
+  const heading = { error: 'ERRORES / PROBLEMAS', improvement: 'MEJORAS / SOLUCIONES', formula: 'POSIBLES FÓRMULAS / ECUACIONES' }[tone];
+  return `<section class="rounded-xl border ${styles} p-4"><div class="text-[10px] font-mono uppercase tracking-widest mb-3">${heading}</div>${values.length ? `<ol class="space-y-2 list-decimal list-inside">${values.map((v) => `<li class="text-sm leading-6">${escapeHtml(v)}</li>`).join('')}</ol>` : `<div class="text-sm opacity-70">${escapeHtml(empty)}</div>`}</section>`;
+}
+
+function extractAnalysisLists(result: any) {
+  const errors = uniqueItems(collectByKeys(result, ERROR_KEYS).flatMap((v) => flattenItems(v)));
+  const improvements = uniqueItems(collectByKeys(result, IMPROVEMENT_KEYS).flatMap((v) => flattenItems(v)));
+  const formulas = uniqueItems(collectByKeys(result, FORMULA_KEYS).flatMap((v) => flattenItems(v)));
+  return { errors, improvements, formulas };
 }
 
 function paintResult(result: any, productName: string, productId: string) {
   const panel = ensureRealShell();
   if (!panel) return;
 
-  const materiales = Array.isArray(result?.materiales) ? result.materiales : [];
   const productMaterialId = result?.producto?.materialId ? String(result.producto.materialId) : '';
+  const materialResult = Array.isArray(result?.materiales) ? result.materiales[0]?.resultado || {} : {};
+  const combined = { ...materialResult, ...result };
+  const { errors, improvements, formulas } = extractAnalysisLists(combined);
   const status = getStatus();
 
   if (status) {
@@ -135,23 +149,16 @@ function paintResult(result: any, productName: string, productId: string) {
     status.className = 'text-[10px] font-mono text-emerald-400 mt-2';
   }
 
-  panel.innerHTML = `
-    <div class="space-y-5">
-      <div>
-        <div class="text-[10px] font-mono uppercase tracking-widest text-cyan-400">Resultado real de ARKON</div>
-        <div class="mt-1 text-lg font-semibold text-white">${escapeHtml(productName || result?.producto?.nombre || productId)}</div>
-        <div class="mt-1 text-[10px] font-mono text-slate-500">Producto: ${escapeHtml(productId)} · Material utilizado por ARKON: ${escapeHtml(productMaterialId || 'no disponible')}</div>
-      </div>
-
-      <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs text-emerald-200">
-        El material enviado a ARKON proviene exclusivamente de <span class="font-mono">productos.material_id</span> del producto seleccionado. No se fabrica ni se sustituye ningún valor.
-      </div>
-
-      <div class="space-y-4">
-        ${materiales.length ? materiales.map(renderMaterial).join('') : '<div class="text-xs text-amber-300">ARKON no devolvió resultados de propiedades.</div>'}
-      </div>
+  panel.innerHTML = `<div class="space-y-5">
+    <div>
+      <div class="text-[10px] font-mono uppercase tracking-widest text-cyan-400">Resultado real de ARKON</div>
+      <div class="mt-1 text-lg font-semibold text-white">${escapeHtml(productName || result?.producto?.nombre || productId)}</div>
+      <div class="mt-1 text-[10px] font-mono text-slate-500">Producto: ${escapeHtml(productId)} · Material utilizado por ARKON: ${escapeHtml(productMaterialId || 'no disponible')}</div>
     </div>
-  `;
+    ${section('errores', errors, 'error', 'ARKON no devolvió errores o problemas en esta respuesta.')}
+    ${section('mejoras', improvements, 'improvement', 'ARKON no devolvió mejoras, soluciones o recomendaciones en esta respuesta.')}
+    ${section('fórmulas', formulas, 'formula', 'ARKON no devolvió posibles fórmulas o ecuaciones en esta respuesta.')}
+  </div>`;
 
   (window as any).__ARKON_LAST_ANALYSIS__ = result;
   window.dispatchEvent(new CustomEvent('arkon:analysis-complete', { detail: result }));
@@ -164,39 +171,22 @@ function paintError(message: string) {
     status.textContent = `Error ARKON: ${message}`;
     status.className = 'text-[10px] font-mono text-rose-400 mt-2';
   }
-  if (panel) {
-    panel.innerHTML = `
-      <div class="space-y-2">
-        <div class="text-sm font-semibold text-rose-300">ARKON no pudo completar el análisis.</div>
-        <div class="text-xs text-slate-400">${escapeHtml(message)}</div>
-      </div>
-    `;
-  }
+  if (panel) panel.innerHTML = `<div class="space-y-2"><div class="text-sm font-semibold text-rose-300">ARKON no pudo completar el análisis.</div><div class="text-xs text-slate-400">${escapeHtml(message)}</div></div>`;
 }
 
 async function loadRealProduct(id: string) {
-  if (!/^\d+$/.test(String(id).trim())) {
-    throw new Error('La selección del catálogo debe contener el id numérico del producto.');
-  }
-
+  if (!/^\d+$/.test(String(id).trim())) throw new Error('La selección del catálogo debe contener el id numérico del producto.');
   const response = await fetch(`/api/products/${encodeURIComponent(id)}`, { cache: 'no-store' });
   const text = await response.text();
   let data: any;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(text || `HTTP ${response.status}`);
-  }
-  if (!response.ok || !data?.success || !data?.product) {
-    throw new Error(data?.mensaje || `No se encontró información real para ${id}`);
-  }
+  try { data = JSON.parse(text); } catch { throw new Error(text || `HTTP ${response.status}`); }
+  if (!response.ok || !data?.success || !data?.product) throw new Error(data?.mensaje || `No se encontró información real para ${id}`);
   return data.product;
 }
 
 async function runRealAnalysis(productId: string) {
   const id = String(productId || '').trim();
   ensureRealShell();
-
   if (!/^\d+$/.test(id)) {
     paintError('El botón Analizar no recibió un id numérico de producto. Se detuvo el análisis para no enviar un material equivocado a ARKON.');
     return;
@@ -206,10 +196,7 @@ async function runRealAnalysis(productId: string) {
     const product = await loadRealProduct(id);
     const title = getView()?.querySelector('h3');
     if (title) title.textContent = product.nombre || id;
-
-    const badge = Array.from(getView()?.querySelectorAll('span') || []).find((el) =>
-      ['esperando análisis', 'producto analizado', 'producto seleccionado'].includes(textOf(el))
-    );
+    const badge = Array.from(getView()?.querySelectorAll('span') || []).find((el) => ['esperando análisis', 'producto analizado', 'producto seleccionado'].includes(textOf(el)));
     if (badge) badge.textContent = 'Producto analizado';
 
     const status = getStatus();
@@ -224,19 +211,10 @@ async function runRealAnalysis(productId: string) {
       cache: 'no-store',
       body: JSON.stringify({ productId: id }),
     });
-
     const text = await response.text();
     let result: any;
-    try {
-      result = JSON.parse(text);
-    } catch {
-      throw new Error(text || `HTTP ${response.status}`);
-    }
-
-    if (!response.ok || result?.ok === false) {
-      throw new Error(result?.error || `HTTP ${response.status}`);
-    }
-
+    try { result = JSON.parse(text); } catch { throw new Error(text || `HTTP ${response.status}`); }
+    if (!response.ok || result?.ok === false) throw new Error(result?.error || `HTTP ${response.status}`);
     paintResult(result, product.nombre, id);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -250,32 +228,13 @@ async function loadRealCatalog() {
     const response = await fetch('/api/products', { cache: 'no-store' });
     const data = await response.json();
     if (!response.ok || !Array.isArray(data)) return;
-
     const validProducts = data.filter((p: any) => p && /^\d+$/.test(String(p.id || '')));
 
     const selector = document.querySelector('#global-product-selector') as HTMLSelectElement | null;
-    if (selector) {
-      selector.innerHTML = validProducts.map((p: any) =>
-        `<option value="${escapeHtml(String(p.id))}">${escapeHtml(String(p.id))} — ${escapeHtml(String(p.nombre || 'Producto'))}</option>`
-      ).join('');
-    }
+    if (selector) selector.innerHTML = validProducts.map((p: any) => `<option value="${escapeHtml(String(p.id))}">${escapeHtml(String(p.id))} — ${escapeHtml(String(p.nombre || 'Producto'))}</option>`).join('');
 
     const tableBody = document.querySelector('#view-catalog table tbody') as HTMLElement | null;
-    if (tableBody) {
-      tableBody.innerHTML = validProducts.map((p: any) => `
-        <tr class="hover:bg-slate-900/40 transition">
-          <td class="py-3.5 px-3">
-            <div class="font-bold text-white">${escapeHtml(String(p.nombre || 'Producto'))}</div>
-            <div class="text-[10px] font-mono text-cyan-400">Producto ${escapeHtml(String(p.id))} · material ${escapeHtml(String(p.materialId || 'sin material_id'))}</div>
-          </td>
-          <td class="py-3.5 px-3 text-slate-400">${escapeHtml(String(p.categoria || 'Sin categoría'))}</td>
-          <td class="py-3.5 px-3"><span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-mono border border-emerald-500/20">${escapeHtml(String(p.estado || ''))}</span></td>
-          <td class="py-3.5 px-3 text-right">
-            <button data-arkon-product-id="${escapeHtml(String(p.id))}" class="arkon-catalog-analyze px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500 hover:bg-cyan-400 text-slate-950 cursor-pointer font-bold transition">Analizar</button>
-          </td>
-        </tr>
-      `).join('');
-    }
+    if (tableBody) tableBody.innerHTML = validProducts.map((p: any) => `<tr class="hover:bg-slate-900/40 transition"><td class="py-3.5 px-3"><div class="font-bold text-white">${escapeHtml(String(p.nombre || 'Producto'))}</div><div class="text-[10px] font-mono text-cyan-400">Producto ${escapeHtml(String(p.id))} · material ${escapeHtml(String(p.materialId || 'sin material_id'))}</div></td><td class="py-3.5 px-3 text-slate-400">${escapeHtml(String(p.categoria || 'Sin categoría'))}</td><td class="py-3.5 px-3"><span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-mono border border-emerald-500/20">${escapeHtml(String(p.estado || ''))}</span></td><td class="py-3.5 px-3 text-right"><button data-arkon-product-id="${escapeHtml(String(p.id))}" class="arkon-catalog-analyze px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500 hover:bg-cyan-400 text-slate-950 cursor-pointer font-bold transition">Analizar</button></td></tr>`).join('');
 
     const firstWithMaterial = validProducts.find((p: any) => String(p.materialId || '').trim());
     if (selector && firstWithMaterial) selector.value = String(firstWithMaterial.id);
@@ -287,7 +246,6 @@ async function loadRealCatalog() {
 export default function ArkonAnalysisConnector() {
   useEffect(() => {
     let cancelled = false;
-
     resetAnalysisView();
     loadRealCatalog();
 
@@ -302,7 +260,6 @@ export default function ArkonAnalysisConnector() {
       if (!w.__ARKON_REAL_BRIDGE_INSTALLED__) {
         const originalSwitchNav = w.switchNav;
         const originalCambiarProductoGlobal = w.cambiarProductoGlobal;
-
         const analyze = async (id: string) => {
           const productId = String(id || '').trim();
           if (!/^\d+$/.test(productId)) {
@@ -315,7 +272,6 @@ export default function ArkonAnalysisConnector() {
           ensureRealShell();
           await runRealAnalysis(productId);
         };
-
         w.seleccionarYAnalizar = analyze;
         w.analizarDesdeCatalogo = analyze;
         w.__ARKON_REAL_BRIDGE_INSTALLED__ = true;
@@ -341,7 +297,6 @@ export default function ArkonAnalysisConnector() {
       }
 
       if (!textOf(button).includes('analizar')) return;
-
       event.preventDefault();
       event.stopPropagation();
       if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
@@ -350,7 +305,6 @@ export default function ArkonAnalysisConnector() {
       const match = inline.match(/(?:analizarDesdeCatalogo|seleccionarYAnalizar)\(['"]([^'"]+)['"]\)/);
       const selector = document.querySelector('#global-product-selector') as HTMLSelectElement | null;
       const productId = match?.[1] || selector?.value || '';
-
       if (/^\d+$/.test(productId)) {
         const w = window as any;
         if (typeof w.seleccionarYAnalizar === 'function') w.seleccionarYAnalizar(productId);
