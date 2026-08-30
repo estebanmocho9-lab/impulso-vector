@@ -31,8 +31,6 @@ export async function POST(req: NextRequest) {
     const productIdRaw = body.productId ?? body.product_id;
     const productId = Number(String(productIdRaw ?? '').trim());
 
-    // La selección es SIEMPRE el producto de public.productos.
-    // El único material que se envía a ARKON sale de productos.material_id.
     if (!Number.isInteger(productId)) {
       return NextResponse.json({
         ok: false,
@@ -63,21 +61,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: false,
         error: `El producto ${productId} (${product.nombre}) no tiene material_id en public.productos.`,
-        producto: {
-          id: product.id,
-          nombre: product.nombre,
-          contexto: product.contexto,
-          materialId: null,
-        },
+        producto: { id: product.id, nombre: product.nombre, contexto: product.contexto, materialId: null },
       }, { status: 422 });
     }
 
     const bridgeUrl = getArkonUrl();
     const token = process.env.ARKON_BRIDGE_TOKEN?.trim();
 
-    // IMPORTANTE: aquí llamamos al análisis COMPLETO de ARKON (/api/analizar),
-    // no al endpoint /api/neural-analysis que solamente devuelve activaciones de neuronas.
-    // Así Impulso Vector recibe fallas, mejoras, TRIZ y demás resultado científico real.
     const response = await fetch(`${bridgeUrl}/api/analizar`, {
       method: 'POST',
       headers: {
@@ -86,6 +76,7 @@ export async function POST(req: NextRequest) {
       },
       cache: 'no-store',
       body: JSON.stringify({
+        product_id: product.id,
         material_id: materialId,
         contexto: product.contexto || 'general',
         producto: product.nombre,
@@ -104,18 +95,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: false,
         error: arkon?.error || `ARKON respondió HTTP ${response.status}`,
-        producto: {
-          id: product.id,
-          nombre: product.nombre,
-          contexto: product.contexto || 'general',
-          materialId,
-        },
+        producto: { id: product.id, nombre: product.nombre, contexto: product.contexto || 'general', materialId },
         detalle: arkon,
       }, { status: response.status >= 400 && response.status < 600 ? response.status : 502 });
     }
 
-    // El producto mostrado sigue siendo el seleccionado en public.productos.
-    // Los datos científicos del análisis vienen del motor ARKON.
     const resultado = {
       ...arkon,
       producto: {
@@ -128,10 +112,7 @@ export async function POST(req: NextRequest) {
       fuente: 'ARKON_DAP_REAL',
     };
 
-    return NextResponse.json({
-      ok: true,
-      resultado,
-    }, { status: 200 });
+    return NextResponse.json({ ok: true, resultado }, { status: 200 });
   } catch (error: any) {
     console.error('Error conectando producto con el análisis completo de ARKON:', error);
     return NextResponse.json(
