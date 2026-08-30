@@ -73,49 +73,46 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const productIdRaw = body.productId ?? body.product_id;
-    const materialIdRaw = body.materialId ?? body.material_id;
-    const supabase = getSupabase();
+    const productId = Number(String(productIdRaw ?? '').trim());
 
-    let product: ProductRow | null = null;
-
-    if (productIdRaw !== undefined && productIdRaw !== null && String(productIdRaw).trim() !== '') {
-      const selector = String(productIdRaw).trim();
-
-      if (/^\d+$/.test(selector)) {
-        const { data, error } = await supabase
-          .from('productos')
-          .select('id,nombre,contexto,material_id,composicion')
-          .eq('id', Number(selector))
-          .eq('activo', true)
-          .maybeSingle();
-        if (error) throw error;
-        product = (data as ProductRow | null) || null;
-      } else {
-        const { data, error } = await supabase
-          .from('productos')
-          .select('id,nombre,contexto,material_id,composicion')
-          .eq('material_id', selector)
-          .eq('activo', true)
-          .order('id', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-        if (error) throw error;
-        product = (data as ProductRow | null) || null;
-      }
-
-      if (!product) {
-        return NextResponse.json({ ok: false, error: `Producto '${selector}' no encontrado.` }, { status: 404 });
-      }
+    // La selección siempre representa un producto de public.productos.
+    // El material se obtiene exclusivamente de ese registro.
+    if (!Number.isInteger(productId)) {
+      return NextResponse.json({
+        ok: false,
+        error: 'El análisis requiere el id numérico del producto seleccionado en public.productos.',
+      }, { status: 400 });
     }
 
-    const materialId = product?.material_id
-      ? String(product.material_id).trim()
-      : (materialIdRaw ? String(materialIdRaw).trim() : '');
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from('productos')
+      .select('id,nombre,contexto,material_id,composicion')
+      .eq('id', productId)
+      .eq('activo', true)
+      .maybeSingle();
 
+    if (error) throw error;
+
+    const product = (data as ProductRow | null) || null;
+    if (!product) {
+      return NextResponse.json({
+        ok: false,
+        error: `Producto '${productId}' no encontrado en public.productos.`,
+      }, { status: 404 });
+    }
+
+    const materialId = product.material_id ? String(product.material_id).trim() : '';
     if (!materialId) {
       return NextResponse.json({
         ok: false,
-        error: 'El producto no tiene material_id vinculado. Complete productos.material_id antes de analizarlo.',
+        error: `El producto ${productId} (${product.nombre}) no tiene material_id en public.productos.`,
+        producto: {
+          id: product.id,
+          nombre: product.nombre,
+          contexto: product.contexto,
+          materialId: null,
+        },
       }, { status: 422 });
     }
 
@@ -129,13 +126,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: false,
         error: 'ARKON no pudo analizar el material vinculado.',
-        producto: product ? { id: product.id, nombre: product.nombre, contexto: product.contexto } : null,
-        materialId,
+        producto: {
+          id: product.id,
+          nombre: product.nombre,
+          contexto: product.contexto,
+          materialId,
+        },
         detalle: error?.message || String(error),
       }, { status: 502 });
     }
 
-    // ARKON no devuelve actualmente un "indice" global. No lo inventamos.
     const indice = numeric(resultado?.indice ?? resultado?.indiceGlobal);
     const cobertura = normalizeCobertura(resultado);
     const neuronasActivadas = Array.isArray(resultado?.neuronasActivadas)
@@ -152,14 +152,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       fuente: 'ARKON_DAP_REAL',
-      producto: product ? {
+      producto: {
         id: product.id,
         nombre: product.nombre,
         contexto: product.contexto || 'general',
         materialId,
         materialIds: [materialId],
-      } : null,
-      // Este campo solo existe si ARKON lo devuelve. No se calcula ni se inventa.
+      },
       indice,
       indiceDisponible: indice !== null,
       cobertura,
