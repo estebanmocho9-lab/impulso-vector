@@ -97,25 +97,17 @@ const BODY_HTML = `
       </nav>
     </div>
 
-    <!-- ARKON PRO Box Bottom -->
+    <!-- FUENTES REALES DEL SISTEMA -->
     <div class="p-4 border-t border-slate-900 bg-slate-950/60">
-      <div class="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-lg">
+      <div class="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
         <div class="flex items-center justify-between">
-          <span class="text-xs font-bold text-white">ARKON PRO</span>
-          <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Plan Activo</span>
+          <span class="text-xs font-bold text-white">Fuentes del demo</span>
+          <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">EN VIVO</span>
         </div>
-        <div class="space-y-1">
-          <div class="flex justify-between text-[11px] text-slate-400">
-            <span>Créditos disponibles</span>
-            <strong class="text-emerald-400 font-mono">245 / 300</strong>
-          </div>
-          <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-            <div class="bg-gradient-to-r from-cyan-500 to-emerald-400 h-full w-[82%]"></div>
-          </div>
+        <div class="space-y-2 text-[10px] text-slate-400">
+          <div class="flex justify-between gap-2"><span>Productos</span><strong class="text-slate-200">Supabase</strong></div>
+          <div class="flex justify-between gap-2"><span>Propiedades</span><strong class="text-slate-200">Sheets · NORMALIZACION</strong></div>
         </div>
-        <button onclick="alert('Plan ARKON PRO activo. Créditos suficientes para simulaciones avanzadas.')" class="w-full py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-white transition cursor-pointer">
-          Actualizar plan
-        </button>
       </div>
     </div>
   </aside>
@@ -756,7 +748,7 @@ const BODY_HTML = `
             <div class="glass-card rounded-xl p-4 flex items-center justify-between">
               <div>
                 <div class="text-[10px] font-mono uppercase text-slate-400">Productos en catálogo</div>
-                <div data-kpi="productos-count" class="text-2xl font-extrabold text-white mt-1 font-mono">3</div>
+                <div data-kpi="productos-count" class="text-2xl font-extrabold text-white mt-1 font-mono">—</div>
               </div>
               <div class="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
@@ -1250,40 +1242,20 @@ const BODY_HTML = `
 
     </main>
 
-    <!-- FOOTER DE MÉTRICAS GLOBALES DEL SISTEMA (EXACTO A LA IMAGEN) -->
+    <!-- ESTADO REAL DE CONEXIONES -->
     <footer class="border-t border-slate-900 bg-slate-950 py-4 px-6 mt-12">
-      <div class="max-w-[1600px] mx-auto grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 text-center">
+      <div class="max-w-[1600px] mx-auto grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
         <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-900">
-          <div class="text-[10px] font-mono uppercase text-slate-400">Fuentes científicas</div>
-          <div class="text-sm font-bold text-cyan-400 mt-0.5">1.248</div>
+          <div class="text-[10px] font-mono uppercase text-slate-400">Productos activos en Supabase</div>
+          <div data-kpi="productos-count" class="text-sm font-bold text-cyan-400 mt-0.5">—</div>
         </div>
         <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-900">
-          <div class="text-[10px] font-mono uppercase text-slate-400">Materiales indexados</div>
-          <div class="text-sm font-bold text-cyan-400 mt-0.5">356</div>
+          <div class="text-[10px] font-mono uppercase text-slate-400">Propiedades usadas por el motor</div>
+          <div class="text-sm font-bold text-cyan-400 mt-0.5">Google Sheets · NORMALIZACION</div>
         </div>
         <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-900">
-          <div class="text-[10px] font-mono uppercase text-slate-400">Propiedades extraídas</div>
-          <div class="text-sm font-bold text-cyan-400 mt-0.5">18.732</div>
-        </div>
-        <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-900">
-          <div class="text-[10px] font-mono uppercase text-slate-400">Ensayos y métodos</div>
-          <div class="text-sm font-bold text-cyan-400 mt-0.5">2.951</div>
-        </div>
-        <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-900">
-          <div class="text-[10px] font-mono uppercase text-slate-400">Relaciones construidas</div>
-          <div class="text-sm font-bold text-cyan-400 mt-0.5">27.814</div>
-        </div>
-        <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-900">
-          <div class="text-[10px] font-mono uppercase text-slate-400">Simulaciones realizadas</div>
-          <div class="text-sm font-bold text-cyan-400 mt-0.5">4.820</div>
-        </div>
-        <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-900">
-          <div class="text-[10px] font-mono uppercase text-slate-400">Oportunidades activas</div>
-          <div class="text-sm font-bold text-emerald-400 mt-0.5">27</div>
-        </div>
-        <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-900">
-          <div class="text-[10px] font-mono uppercase text-slate-400">Proyectos en curso</div>
-          <div class="text-sm font-bold text-cyan-400 mt-0.5">12</div>
+          <div class="text-[10px] font-mono uppercase text-slate-400">Explicación generativa</div>
+          <div class="text-sm font-bold text-violet-300 mt-0.5">Meta Llama 3.2 · opcional</div>
         </div>
       </div>
     </footer>

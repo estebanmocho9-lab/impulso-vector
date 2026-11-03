@@ -57,6 +57,12 @@ function list(items: string[], empty: string) { return items.length ? `<ol class
 function renderIntegral(result: any, product: any, productId: string) {
   const p = shell(); if (!p) return;
   const material = String(result?.producto?.materialId || product?.materialId || '');
+  const compositionMaterials = arr(product?.composicion?.materiales).map((x: any) => String(x));
+  const compositionRoles = product?.composicion?.roles && typeof product.composicion.roles === 'object' ? product.composicion.roles : {};
+  const compositionLabel = compositionMaterials.map((id: string) => `${id}${compositionRoles[id] ? ` · ${String(compositionRoles[id])}` : ''}`).join(' / ');
+  const compositionNote = compositionMaterials.length
+    ? card('COMPOSICIÓN REGISTRADA · ALCANCE DEL CÁLCULO', `<div class="text-sm text-slate-200">${esc(compositionLabel)}</div><div class="mt-2 text-xs leading-5 text-slate-400">Material base analizado: <b>${esc(material)}</b>. ${compositionMaterials.length > 1 ? 'Los registros no incluyen fracciones/porcentajes verificados; no se calcula una mezcla ni un promedio de componentes.' : 'El registro identifica un solo material; se muestran sus propiedades disponibles.'}</div>`, 'border-blue-500/30')
+    : '';
   const r = result?.resultado || {};
   const materialResult = arr(result?.materiales)[0]?.resultado || {};
   const a = r.activacion || materialResult || {};
@@ -84,9 +90,19 @@ function renderIntegral(result: any, product: any, productId: string) {
   const inferenciaText = inferencia ? JSON.stringify(inferencia, null, 2) : '';
   const cruzRows = cruces.map((x: any) => `<tr class="border-t border-slate-800"><td class="px-2 py-2">${esc(x.nombre_cruce || x.nombre || x.id)}</td><td class="px-2 py-2">${esc(x.problema || x.descripcion || '')}</td><td class="px-2 py-2 font-mono text-xs">${esc(x.formula || '')}</td></tr>`).join('');
   const trizRows = triz.map((x: any) => `<tr class="border-t border-slate-800"><td class="px-2 py-2">${esc(x.param_triz_mejora || x.mejora || '')}</td><td class="px-2 py-2">${esc(x.param_triz_empeora || x.empeora || '')}</td><td class="px-2 py-2">${esc(Array.isArray(x.nombres_principios) ? x.nombres_principios.join(', ') : x.principios || '')}</td></tr>`).join('');
+  const ai = result?.ia || {};
+  const aiText = typeof ai.text === 'string' ? esc(ai.text).replace(/\n/g, '<br>') : '';
+  const aiBlock = card('SÍNTESIS ASISTIDA · META LLAMA 3.2', ai.status === 'ok'
+    ? `<div class="text-sm leading-6 text-slate-200">${aiText}</div><div class="mt-3 text-[10px] text-slate-500">${esc(ai.provider)} · ${esc(ai.model)}. Interpreta datos de ARKON; no sustituye cálculos ni validación experimental.</div>`
+    : `<div class="text-sm text-slate-300">${esc(ai.status === 'not_configured' ? 'Pendiente configurar CLOUDFLARE_ACCOUNT_ID y CLOUDFLARE_API_TOKEN en Vercel. Los cálculos de ARKON funcionan independientemente de esta conexión.' : ai.message || 'Síntesis no disponible; se conserva el resultado numérico de ARKON.')}</div>`, 'border-violet-500/30');
+  const fallbackNote = result?.modoRespaldo
+    ? card('TRANSPARENCIA DEL RESULTADO', `<div class="text-sm leading-6 text-amber-100">${esc(result.motivoRespaldo || 'Se muestran únicamente los resultados disponibles del motor de activación y NORMALIZACION; no se agregan cálculos de mezcla.')}</div>`, 'border-amber-500/30')
+    : '';
 
   p.innerHTML = `<div class="space-y-5">
     <div class="flex flex-wrap items-end justify-between gap-4"><div><div class="text-[10px] font-mono uppercase tracking-widest text-cyan-400">ARKON REAL · diagnóstico integral</div><div class="mt-1 text-2xl font-semibold text-white">${esc(product?.nombre || result?.producto?.nombre || productId)}</div><div class="mt-1 text-xs font-mono text-slate-500">Producto ${esc(productId)} · Material ${esc(material)} · Fuente: Supabase + Google Sheets NORMALIZACION</div></div><div class="grid grid-cols-2 gap-2 text-center"><div class="rounded-lg border border-cyan-500/20 p-3"><div class="text-[10px] text-slate-500">COBERTURA</div><div class="text-xl font-bold text-cyan-300">${Number.isFinite(cobertura) ? cobertura.toFixed(1) : '—'}%</div></div><div class="rounded-lg border border-emerald-500/20 p-3"><div class="text-[10px] text-slate-500">CONFIANZA</div><div class="text-xl font-bold text-emerald-300">${Number.isFinite(confidence) ? confidence.toFixed(3) : '—'}</div></div></div></div>
+    ${fallbackNote}
+    ${compositionNote}
     ${card('RESUMEN OPERATIVO', `<div class="grid md:grid-cols-4 gap-3"><div>Neuronas con datos <b>${esc(a.neuronasConDatos ?? neurons.length)}/${esc(a.totalNeuronas ?? '?')}</b></div><div>Problemas <b>${problems.length}</b></div><div>Anomalías <b>${anomalies.length}</b></div><div>Faltantes <b>${pending.length}</b></div></div>`, 'border-cyan-500/20')}
     ${card('PROBLEMAS DETECTADOS', list(problemItems, 'Ningún problema supera los umbrales operativos actuales.'), 'border-rose-500/30')}
     ${errors.length ? card('ERRORES / DATOS FALTANTES REPORTADOS POR ARKON', list(errors.map((x: any) => typeof x === 'string' ? x : JSON.stringify(x)), 'Sin errores reportados.'), 'border-rose-500/20') : ''}
@@ -97,6 +113,8 @@ function renderIntegral(result: any, product: any, productId: string) {
     ${inferenciaText ? card('INFERENCIA CIENTÍFICA', `<pre class="whitespace-pre-wrap text-xs text-slate-300 overflow-auto">${esc(inferenciaText)}</pre>`, 'border-violet-500/30') : ''}
     ${cruces.length ? card('CRUCES CIENTÍFICOS', `<div class="overflow-auto"><table class="w-full text-xs"><thead><tr><th class="text-left px-2 py-2">CRUCE</th><th class="text-left px-2 py-2">PROBLEMA</th><th class="text-left px-2 py-2">FÓRMULA</th></tr></thead><tbody>${cruzRows}</tbody></table></div>`, 'border-blue-500/30') : ''}
     ${triz.length ? card('CONTRADICCIONES TRIZ', `<div class="overflow-auto"><table class="w-full text-xs"><thead><tr><th class="text-left px-2 py-2">MEJORA</th><th class="text-left px-2 py-2">EMPEORA</th><th class="text-left px-2 py-2">PRINCIPIOS</th></tr></thead><tbody>${trizRows}</tbody></table></div>`, 'border-fuchsia-500/30') : ''}
+    ${aiBlock}
+    ${ai.status === 'ok' ? card('USO DE LA SÍNTESIS', 'El texto es generativo y puede contener errores. Contrastá cada interpretación con los valores y las fuentes; no constituye una validación experimental.', 'border-amber-500/30') : ''}
     <div class="text-[10px] font-mono text-slate-600">Respuesta cruda disponible en window.__ARKON_LAST_ANALYSIS__. No se modificaron datos de Supabase.</div>
   </div>`;
   (window as any).__ARKON_LAST_ANALYSIS__ = result;
@@ -125,11 +143,12 @@ async function run(id: string) {
   } catch (e) { errorView(e instanceof Error ? e.message : String(e)); console.error('ARKON integral analysis failed:', e); }
 }
 
-async function syncCatalog() {
-  try {
-    const r = await fetch('/api/products', { cache: 'no-store' }); const data = await r.json(); if (!r.ok || !Array.isArray(data)) return;
-    const products = data.filter((x: any) => x && /^\d+$/.test(String(x.id)));
-    const selector = document.querySelector('#global-product-selector') as HTMLSelectElement | null;
+  async function syncCatalog() {
+    try {
+      const r = await fetch('/api/products', { cache: 'no-store' }); const data = await r.json(); if (!r.ok || !Array.isArray(data)) return;
+      const products = data.filter((x: any) => x && /^\d+$/.test(String(x.id)));
+      document.querySelectorAll('[data-kpi="productos-count"]').forEach((count) => { count.textContent = String(products.length); });
+      const selector = document.querySelector('#global-product-selector') as HTMLSelectElement | null;
     if (selector) selector.innerHTML = products.map((x: any) => `<option value="${esc(x.id)}">${esc(x.id)} — ${esc(x.nombre)}</option>`).join('');
     const body = document.querySelector('#view-catalog table tbody') as HTMLElement | null;
     if (body) body.innerHTML = products.map((x: any) => `<tr class="hover:bg-slate-900/40"><td class="py-3 px-3"><div class="font-bold text-white">${esc(x.nombre)}</div><div class="text-[10px] font-mono text-cyan-400">Producto ${esc(x.id)} · material ${esc(x.materialId || 'sin material_id')}</div></td><td class="py-3 px-3 text-slate-400">${esc(x.categoria || 'Sin categoría')}</td><td class="py-3 px-3"><span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-mono">${esc(x.estado || '')}</span></td><td class="py-3 px-3 text-right"><button data-arkon-product-id="${esc(x.id)}" class="arkon-catalog-analyze px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500 text-slate-950 cursor-pointer">Analizar</button></td></tr>`).join('');
