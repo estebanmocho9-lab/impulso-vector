@@ -143,6 +143,7 @@ export default async function handler(req, res) {
     const token = String(process.env.ARKON_BRIDGE_TOKEN || '').trim();
     const headers = { 'Content-Type': 'application/json', ...(token ? { 'X-ARKON-TOKEN': token } : {}) };
     const payload = {
+      productId: producto.id,
       material_id: materialId,
       producto: producto.nombre,
       contexto: producto.contexto || 'general',
