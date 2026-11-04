@@ -86,6 +86,9 @@ async function interpretarConMetaLlama(normalized: any) {
   if (!accountId || !token) {
     return { status: 'not_configured', provider: 'Cloudflare Workers AI', model, text: null };
   }
+  if (/[\r\n]/.test(token)) {
+    return { status: 'unavailable', provider: 'Cloudflare Workers AI', model, text: null, message: 'El token configurado en Vercel contiene un salto de línea. Volvé a guardarlo como una sola línea; no compartas su valor.' };
+  }
 
   const activation = normalized?.resultado?.activacion || firstMaterialResult(normalized)?.activacion || {};
   const neurons = Array.isArray(activation.neuronasActivadas) ? activation.neuronasActivadas : [];
@@ -156,8 +159,18 @@ async function interpretarConMetaLlama(normalized: any) {
   } catch (error) {
     const errorName = error instanceof Error ? error.name : 'UnknownError';
     const timedOut = errorName === 'TimeoutError' || errorName === 'AbortError';
-    console.warn('Síntesis Meta Llama no disponible', { errorName, timedOut });
-    const reason = timedOut ? 'Se agotó el tiempo de espera de 8 segundos.' : `Falló la conexión con Cloudflare (${errorName}).`;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const cause = (error as any)?.cause;
+    const rawCauseCode = cause?.code;
+    const causeCode = typeof rawCauseCode === 'string' && /^[A-Z0-9_]+$/i.test(rawCauseCode) ? rawCauseCode : '';
+    const causeMessage = typeof cause?.message === 'string' ? `; ${cause.message}` : '';
+    const safeDetail = `${errorName}${causeCode ? `/${causeCode}` : ''}: ${errorMessage}${causeMessage}`
+      .replaceAll(token, '[token oculto]')
+      .replaceAll(accountId, '[cuenta oculta]')
+      .replace(/[\r\n\t]+/g, ' ')
+      .slice(0, 200);
+    console.warn('Síntesis Meta Llama no disponible', { errorName, causeCode: causeCode || undefined, detail: safeDetail, timedOut });
+    const reason = timedOut ? 'Se agotó el tiempo de espera de 8 segundos.' : `Falló la conexión con Cloudflare: ${safeDetail}.`;
     return { status: 'unavailable', provider: 'Cloudflare Workers AI', model, text: null, message: `${reason} El resultado numérico de ARKON se conserva.` };
   }
 }
