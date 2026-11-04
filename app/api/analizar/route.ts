@@ -134,15 +134,31 @@ async function interpretarConMetaLlama(normalized: any) {
         signal: AbortSignal.timeout(8000),
       }
     );
-    const payload: any = await response.json();
+    const responseText = await response.text();
+    let payload: any;
+    try {
+      payload = JSON.parse(responseText);
+    } catch {
+      console.warn('Meta Llama devolvió una respuesta no JSON', { status: response.status });
+      return { status: 'unavailable', provider: 'Cloudflare Workers AI', model, text: null, message: `Cloudflare devolvió una respuesta no legible (HTTP ${response.status}).` };
+    }
     const text = payload?.result?.response;
-    if (!response.ok || !payload?.success || typeof text !== 'string') {
-      return { status: 'unavailable', provider: 'Cloudflare Workers AI', model, text: null, message: `La síntesis no está disponible (HTTP ${response.status}).` };
+    const providerErrors = Array.isArray(payload?.errors)
+      ? payload.errors.map((item: any) => String(item?.message || item?.code || '')).filter(Boolean)
+      : [];
+    const providerDetail = providerErrors.join(' ').replace(/\s+/g, ' ').slice(0, 180);
+    if (!response.ok || !payload?.success || typeof text !== 'string' || !text.trim()) {
+      console.warn('Meta Llama rechazó la solicitud', { status: response.status, detail: providerDetail || undefined });
+      const detail = providerDetail ? `: ${providerDetail}` : '';
+      return { status: 'unavailable', provider: 'Cloudflare Workers AI', model, text: null, message: `Cloudflare rechazó la solicitud (HTTP ${response.status})${detail}. El resultado de ARKON se conserva.` };
     }
     return { status: 'ok', provider: 'Cloudflare Workers AI', model, text };
   } catch (error) {
-    console.warn('Síntesis Meta Llama no disponible:', error instanceof Error ? error.message : String(error));
-    return { status: 'unavailable', provider: 'Cloudflare Workers AI', model, text: null, message: 'No se pudo obtener la síntesis; el resultado numérico de ARKON se conserva.' };
+    const errorName = error instanceof Error ? error.name : 'UnknownError';
+    const timedOut = errorName === 'TimeoutError' || errorName === 'AbortError';
+    console.warn('Síntesis Meta Llama no disponible', { errorName, timedOut });
+    const reason = timedOut ? 'Se agotó el tiempo de espera de 8 segundos.' : `Falló la conexión con Cloudflare (${errorName}).`;
+    return { status: 'unavailable', provider: 'Cloudflare Workers AI', model, text: null, message: `${reason} El resultado numérico de ARKON se conserva.` };
   }
 }
 

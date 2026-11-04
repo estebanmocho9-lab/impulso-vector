@@ -126,7 +126,7 @@ const BODY_HTML = `
           <div class="flex items-center space-x-3">
             <h2 class="text-base sm:text-lg font-bold text-white tracking-tight">ANÁLISIS INTEGRAL DEL PRODUCTO</h2>
           </div>
-          <p class="text-xs text-slate-400 mt-0.5">Laboratorio científico virtual • Cálculos precisos basados en datos reales</p>
+          <p class="text-xs text-slate-400 mt-0.5">Datos disponibles y faltantes visibles • Indicadores operativos • IA opcional para explicar resultados</p>
         </div>
       </div>
 
@@ -135,7 +135,7 @@ const BODY_HTML = `
         <div class="hidden md:flex items-center space-x-2 text-xs text-slate-400 bg-slate-950 px-3.5 py-2 rounded-xl border border-slate-800">
           <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
           <span>Último análisis</span>
-          <strong class="text-slate-200 font-mono">23/05/2025 14:32</strong>
+          <strong class="text-slate-200 font-mono">Se actualiza al analizar</strong>
         </div>
 
         <!-- Estado EN VIVO -->
@@ -1255,7 +1255,7 @@ const BODY_HTML = `
         </div>
         <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-900">
           <div class="text-[10px] font-mono uppercase text-slate-400">Explicación generativa</div>
-          <div class="text-sm font-bold text-violet-300 mt-0.5">Meta Llama 3.2 · opcional</div>
+          <div id="ai-connection-status" class="text-sm font-bold text-violet-300 mt-0.5">Sin prueba de conexión en este análisis</div>
         </div>
       </div>
     </footer>
