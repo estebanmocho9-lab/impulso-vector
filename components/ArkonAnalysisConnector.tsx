@@ -10,6 +10,28 @@ function textOf(el: Element) { return (el.textContent || '').replace(/\s+/g, ' '
 function view() { return document.querySelector('#view-analysis') as HTMLElement | null; }
 function status() { return document.querySelector('#analysis-live-status') as HTMLElement | null; }
 
+function ensureStateControl(header: HTMLElement) {
+  if (header.querySelector('#arkon-state-control')) return;
+  const host = header.querySelector(':scope > div:first-child') as HTMLElement | null;
+  const control = document.createElement('div');
+  control.id = 'arkon-state-control';
+  control.className = 'mt-3 flex flex-wrap items-center gap-2';
+  const label = document.createElement('label');
+  label.htmlFor = 'arkon-state-code';
+  label.className = 'text-[10px] font-mono uppercase tracking-wider text-slate-400';
+  label.textContent = 'Estado del material';
+  const input = document.createElement('input');
+  input.id = 'arkon-state-code'; input.type = 'text'; input.maxLength = 32;
+  input.placeholder = 'p. ej., E02'; input.autocomplete = 'off'; input.spellcheck = false;
+  input.className = 'w-28 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-white placeholder:text-slate-600';
+  input.setAttribute('aria-label', 'Código del estado del material');
+  const note = document.createElement('span');
+  note.className = 'text-[10px] text-slate-500';
+  note.textContent = 'Sin estado explícito, la evidencia queda para revisión.';
+  control.append(label, input, note);
+  (host || header).appendChild(control);
+}
+
 function shell() {
   const v = view();
   if (!v) return null;
@@ -19,6 +41,7 @@ function shell() {
     const h = header.querySelector('h3'); if (h) h.textContent = 'ANÁLISIS INTEGRAL REAL — ARKON';
     let s = document.querySelector('#analysis-live-status') as HTMLElement | null;
     if (!s) { s = document.createElement('div'); s.id = 'analysis-live-status'; s.className = 'text-[10px] font-mono text-slate-500 mt-2'; const left = header.querySelector(':scope > div:first-child'); if (left) left.appendChild(s); }
+    ensureStateControl(header);
   }
   let p = document.querySelector('#arkon-real-result') as HTMLElement | null;
   if (!p) { p = document.createElement('div'); p.id = 'arkon-real-result'; p.className = 'glass-card rounded-2xl border border-cyan-500/20 bg-slate-950/70 p-6'; v.appendChild(p); }
@@ -55,6 +78,39 @@ function card(title: string, body: string, cls = 'border-slate-700/60') {
   return `<section class="rounded-xl border ${cls} bg-slate-950/40 p-4"><div class="text-[10px] font-mono uppercase tracking-widest text-slate-400 mb-3">${title}</div>${body}</section>`;
 }
 function list(items: string[], empty: string) { return items.length ? `<ol class="space-y-2 list-decimal list-inside">${items.map(x => `<li class="text-sm leading-6 text-slate-200">${esc(x)}</li>`).join('')}</ol>` : `<div class="text-sm text-slate-500">${esc(empty)}</div>`; }
+
+function renderAINeuronBlock(data: any) {
+  if (!data) return '';
+  const agents = arr(data.agents);
+  if (!agents.length) {
+    return card('NEURONAS IA · TURSO → META LLAMA 3.2', `<div class="text-sm text-slate-200">${esc(data.message || 'La capa IA no ejecutó agentes.')}</div><div class="mt-2 text-xs text-slate-500">Modo lectura; no se modificaron datos de Supabase.</div>`, 'border-violet-500/30');
+  }
+  const statusLabels: Record<string, string> = {
+    analyzed: 'Evidencia analizada', needs_review: 'Requiere revisión', no_evidence: 'Sin evidencia recuperada',
+    turso_not_configured: 'Turso no configurado', llama_not_configured: 'Llama no configurado', unauthorized: 'No autorizado', error: 'Error',
+  };
+  const decisionLabels: Record<string, string> = {
+    supported: 'Evidencia compatible', conflicting: 'Evidencia contradictoria', rejected: 'Evidencia no correspondiente', insufficient_evidence: 'Evidencia insuficiente',
+  };
+  const rows = agents.map((agent: any) => {
+    const assessment = agent.assessment || {};
+    const cited = new Set(arr(assessment.selectedEvidenceIds).map(String));
+    const evidence = arr(agent.evidence).slice(0, 3).map((source: any) => {
+      const title = `${source.document || source.table || 'Fuente Turso'}${source.page ? ` · pág. ${source.page}` : ''}`;
+      const value = source.rawValue !== null && source.rawValue !== undefined ? `<div class="mt-1 text-xs text-cyan-200">Dato extraído: ${esc(source.rawValue)} ${esc(source.unit || '')}</div>` : '';
+      return `<li class="rounded-lg border ${cited.has(String(source.id)) ? 'border-emerald-500/30' : 'border-slate-800'} bg-slate-950/50 p-3"><div class="text-xs font-semibold text-slate-200">${esc(title)}${cited.has(String(source.id)) ? ' · CITA DE LLAMA' : ''}</div><div class="mt-1 text-[10px] font-mono text-slate-500">${esc(source.id)} · ${esc(source.property || source.table || '')}${source.method ? ` · ${esc(source.method)}` : ''}</div>${value}<div class="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-400">${esc(String(source.excerpt || '').slice(0, 420))}</div></li>`;
+    }).join('');
+    const statusLabel = statusLabels[agent.status] || agent.status || 'Estado no informado';
+    const decisionLabel = decisionLabels[assessment.decision] || '';
+    const neuronIds = arr(agent.connectedNeuronIds).join(', ');
+    const state = agent.selectedState || data.state?.code || 'no especificado';
+    const review = assessment.requiresPhysicalValidation ? '<div class="mt-2 text-[10px] text-amber-300">Requiere validación física/laboratorio antes de aprobar cambios.</div>' : '';
+    return `<article class="rounded-xl border border-violet-500/20 bg-slate-900/50 p-4"><div class="flex flex-wrap items-start justify-between gap-2"><div><div class="font-semibold text-white">${esc(agent.name || agent.agentId)}</div><div class="mt-1 text-[10px] font-mono text-slate-500">${esc(agent.agentId)} · Estado consultado: ${esc(state)} · Cables: ${esc(neuronIds)}</div></div><span class="rounded border border-violet-500/30 px-2 py-1 text-[10px] text-violet-200">${esc(statusLabel)}</span></div><div class="mt-3 text-xs leading-5 text-slate-300"><b>Núcleo:</b> ${esc(agent.nucleus || '')}</div>${decisionLabel ? `<div class="mt-3 text-sm font-semibold text-cyan-200">${esc(decisionLabel)}${assessment.stateMatch ? ` · estado: ${esc(assessment.stateMatch)}` : ''}</div>` : ''}${assessment.rationale ? `<div class="mt-2 text-sm leading-6 text-slate-300">${esc(assessment.rationale)}</div>` : ''}${assessment.missingInformation?.length ? `<div class="mt-2 text-xs text-amber-200">Faltantes: ${esc(assessment.missingInformation.join('; '))}</div>` : ''}${review}${evidence ? `<ul class="mt-3 space-y-2">${evidence}</ul>` : `<div class="mt-3 text-xs text-slate-500">${esc(agent.message || 'Sin fragmentos citables para este agente.')}</div>`}</article>`;
+  }).join('');
+  const stateInfo = data.state?.explicitlyProvided ? `Estado solicitado: ${data.state.code || data.state.name}.` : 'No se indicó estado del material: ningún agente debe declarar equivalencia de estado.';
+  const countInfo = `Agentes ejecutados: ${agents.length} de ${Number(data.availableDirectAgentCount) || 50} perfiles directos disponibles.`;
+  return card('NEURONAS IA · TURSO → META LLAMA 3.2', `<div class="mb-3 text-xs leading-5 text-slate-400"><b class="text-violet-200">${esc(countInfo)}</b> ${esc(stateInfo)} Evidencia recuperada en ARKON desde Turso; Llama recibe fragmentos seleccionados, no credenciales ni acceso a las cuentas. Lectura únicamente; no se escriben fórmulas ni datos en Supabase.</div><div class="space-y-3">${rows}</div>`, 'border-violet-500/30');
+}
 
 function renderIntegral(result: any, product: any, productId: string) {
   const p = shell(); if (!p) return;
@@ -93,6 +149,8 @@ function renderIntegral(result: any, product: any, productId: string) {
   const cruzRows = cruces.map((x: any) => `<tr class="border-t border-slate-800"><td class="px-2 py-2">${esc(x.nombre_cruce || x.nombre || x.id)}</td><td class="px-2 py-2">${esc(x.problema || x.descripcion || '')}</td><td class="px-2 py-2 font-mono text-xs">${esc(x.formula || '')}</td></tr>`).join('');
   const trizRows = triz.map((x: any) => `<tr class="border-t border-slate-800"><td class="px-2 py-2">${esc(x.param_triz_mejora || x.mejora || '')}</td><td class="px-2 py-2">${esc(x.param_triz_empeora || x.empeora || '')}</td><td class="px-2 py-2">${esc(Array.isArray(x.nombres_principios) ? x.nombres_principios.join(', ') : x.principios || '')}</td></tr>`).join('');
   const ai = result?.ia || {};
+  const aiNeurons = result?.aiNeurons || result?.diagnosticoIntegral?.neuronasIA || result?.resultado?.aiNeurons || null;
+  const aiNeuronBlock = renderAINeuronBlock(aiNeurons);
   const aiText = typeof ai.text === 'string' ? esc(ai.text).replace(/\n/g, '<br>') : '';
   const aiStatus = document.querySelector('#ai-connection-status') as HTMLElement | null;
   if (aiStatus) aiStatus.textContent = ai.status === 'ok' ? 'Conectada · respuesta recibida' : ai.status === 'not_configured' ? 'No configurada' : 'No disponible';
@@ -118,6 +176,7 @@ function renderIntegral(result: any, product: any, productId: string) {
     ${inferenciaText ? card('INFERENCIA CIENTÍFICA', `<pre class="whitespace-pre-wrap text-xs text-slate-300 overflow-auto">${esc(inferenciaText)}</pre>`, 'border-violet-500/30') : ''}
     ${cruces.length ? card('CRUCES E ÍNDICES DERIVADOS · REVISAR UNIDADES Y FÓRMULAS', `<div class="overflow-auto"><table class="w-full text-xs"><thead><tr><th class="text-left px-2 py-2">CRUCE</th><th class="text-left px-2 py-2">PROBLEMA</th><th class="text-left px-2 py-2">FÓRMULA</th></tr></thead><tbody>${cruzRows}</tbody></table></div>`, 'border-blue-500/30') : ''}
     ${triz.length ? card('TRIZ · PRINCIPIOS PARA EXPLORAR, NO VALIDACIÓN', `<div class="overflow-auto"><table class="w-full text-xs"><thead><tr><th class="text-left px-2 py-2">MEJORA</th><th class="text-left px-2 py-2">EMPEORA</th><th class="text-left px-2 py-2">PRINCIPIOS</th></tr></thead><tbody>${trizRows}</tbody></table></div>`, 'border-fuchsia-500/30') : ''}
+    ${aiNeuronBlock}
     ${aiBlock}
     ${ai.status === 'ok' ? card('USO DE LA SÍNTESIS', 'El texto es generativo y puede contener errores. Contrastá cada interpretación con los valores y las fuentes; no constituye una validación experimental.', 'border-amber-500/30') : ''}
     <div class="text-[10px] font-mono text-slate-600">Respuesta cruda disponible en window.__ARKON_LAST_ANALYSIS__. No se modificaron datos de Supabase.</div>
@@ -141,7 +200,8 @@ async function run(id: string) {
   try {
     const product = await getProduct(id);
     setStatus(`Ejecutando ARKON REAL · producto ${id} · material ${product.materialId || 'sin material'}`, 'run');
-    const response = await fetch('/api/analizar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store', body: JSON.stringify({ productId: id, contexto: product.contexto || 'general' }) });
+    const selectedState = (document.querySelector('#arkon-state-code') as HTMLInputElement | null)?.value.trim() || '';
+    const response = await fetch('/api/analizar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store', body: JSON.stringify({ productId: id, contexto: product.contexto || 'general', ...(selectedState ? { estado: selectedState } : {}) }) });
     const text = await response.text(); let result: any; try { result = JSON.parse(text); } catch { throw new Error(text || `HTTP ${response.status}`); }
     if (!response.ok || result?.ok === false) throw new Error(result?.error || `HTTP ${response.status}`);
     renderIntegral(result, product, id);

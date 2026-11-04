@@ -192,6 +192,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
   const problemasDetectados = legacyResult?.problemasDetectados ?? legacyNested?.problemasDetectados ?? diagnostic?.problemasDetectados ?? [];
   const anomalias = legacyResult?.anomalias ?? legacyNested?.anomalias ?? materialResult?.anomalias ?? diagnostic?.anomalias ?? [];
   const propiedadesPendientes = legacyResult?.propiedadesPendientes ?? legacyNested?.propiedadesPendientes ?? materialResult?.propiedadesPendientes ?? diagnostic?.propiedadesPendientes ?? [];
+  const aiNeurons = arkon?.aiNeurons ?? diagnostic?.neuronasIA ?? legacyResult?.neuronasIA ?? null;
 
   const producto = {
     id: product.id,
@@ -216,6 +217,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     cruces,
     triz,
     analisisProblemas,
+    ...(aiNeurons ? { aiNeurons } : {}),
     inferencia: legacyResult?.inferencia ?? legacyNested?.inferencia ?? materialResult?.inferencia,
   };
 
@@ -236,6 +238,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     cruces,
     triz,
     analisisProblemas,
+    ...(aiNeurons ? { neuronasIA: aiNeurons } : {}),
   };
 
   return {
@@ -246,6 +249,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     diagnosticoIntegral,
     resultado,
     materiales: arkon?.materiales || [{ materialId, resultado: { ...activacion, errores, mejoras, reglasMejora, formulas, cruces, triz, analisisProblemas } }],
+    ...(aiNeurons ? { aiNeurons } : {}),
   };
 }
 
@@ -277,7 +281,18 @@ export async function POST(req: NextRequest) {
     const bridgeUrl = getArkonUrl();
     const token = process.env.ARKON_BRIDGE_TOKEN?.trim();
     const headers = { 'Content-Type': 'application/json', ...(token ? { 'X-ARKON-TOKEN': token } : {}) };
-    const payload = JSON.stringify({ material_id: materialId, contexto: product.contexto || 'general', producto: product.nombre });
+    const requestedState = typeof body.estado === 'string' ? body.estado.trim() : '';
+    const requestedStateName = typeof body.estadoNombre === 'string' ? body.estadoNombre.trim() : '';
+    const payload = JSON.stringify({
+      productId: product.id,
+      material_id: materialId,
+      contexto: product.contexto || 'general',
+      producto: product.nombre,
+      includeAiNeurons: true,
+      ...(requestedState ? { estado: requestedState } : {}),
+      ...(requestedStateName ? { estadoNombre: requestedStateName } : {}),
+      ...(Array.isArray(body.neuronIds) ? { neuronIds: body.neuronIds.slice(0, 12) } : {}),
+    });
 
     let response: Response | null = null;
     let arkon: any;
