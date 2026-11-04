@@ -105,6 +105,7 @@ function normalizeArkon(arkon, product, materialId) {
     materiales: Array.isArray(arkon?.materiales) && arkon.materiales.length
       ? arkon.materiales
       : [{ materialId, resultado: { ...activacion, errores, mejoras, reglasMejora, formulas, cruces, triz, analisisProblemas } }],
+    ...(arkon?.neuronasIA || arkon?.aiNeurons ? { aiNeurons: arkon.neuronasIA || arkon.aiNeurons } : {}),
   };
 }
 
