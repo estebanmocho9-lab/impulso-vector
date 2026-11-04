@@ -179,7 +179,7 @@ export default async function handler(req, res) {
 
     // Garantía de compatibilidad: si el puente integral no entregó neuronas,
     // consultar el activationEngine real. Nunca se generan valores ficticios.
-    if (!arr(normalized.resultado.activacion?.neuronasActivadas).length) {
+    if (!normalized.aiNeurons && !arr(normalized.resultado.activacion?.neuronasActivadas).length) {
       try {
         const neuralResponse = await fetch(`${bridgeUrl}/api/neural-analysis`, {
           method: 'POST',
