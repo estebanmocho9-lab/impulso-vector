@@ -148,7 +148,7 @@ export default async function handler(req, res) {
       producto: producto.nombre,
       contexto: producto.contexto || 'general',
       composicion: producto.composicion ?? null,
-      ...(body.includeAiNeurons === true ? { includeAiNeurons: true, estado: body.estado, estadoNombre: body.estadoNombre, neuronIds: Array.isArray(body.neuronIds) ? body.neuronIds.filter(id => typeof id === 'string').slice(0, 12) : undefined } : {}),
+      ...(body.includeAiNeurons === true ? { includeAiNeurons: true, estado: body.estado, estadoNombre: body.estadoNombre, neuronIds: Array.isArray(body.neuronIds) ? body.neuronIds.filter(id => typeof id === 'string') : (typeof body.propertyName === 'string' ? [body.propertyName] : undefined) } : {}),
     };
 
     const arkonResponse = await fetch(`${bridgeUrl}/api/analizar`, {
