@@ -242,7 +242,7 @@ function renderAiNeurons(data: any, product: any, productId: string) {
 
 async function runAiNeurons(id: string, stateCode: string, propertyName: string) {
   id = String(id || '').trim();
-  if (!/^\\d+$/.test(id)) return errorView('El análisis IA requiere el id numérico real del producto.');
+  if (!/^\d+$/.test(id)) return errorView('El análisis IA requiere el id numérico real del producto.');
   if (!['E01', 'E02', 'E03'].includes(stateCode)) {
     const panel = ensureAiControls();
     if (panel) { panel.hidden = false; panel.innerHTML = '<div class="text-sm text-amber-300">Seleccioná E01, E02 o E03 para indicar el estado material.</div>'; }
