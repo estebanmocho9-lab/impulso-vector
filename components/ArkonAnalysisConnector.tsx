@@ -13,7 +13,8 @@ function status() { return document.querySelector('#analysis-live-status') as HT
 function shell() {
   const v = view();
   if (!v) return null;
-  Array.from(v.children).forEach((child, i) => { if (i > 0 && (child as HTMLElement).id !== 'arkon-real-result') (child as HTMLElement).hidden = true; });
+  const persistentPanels = new Set(['arkon-real-result', 'arkon-ai-controls', 'arkon-ai-result']);
+  Array.from(v.children).forEach((child, i) => { if (i > 0 && !persistentPanels.has((child as HTMLElement).id)) (child as HTMLElement).hidden = true; });
   const header = v.firstElementChild as HTMLElement | null;
   if (header) {
     const h = header.querySelector('h3'); if (h) h.textContent = 'ANÁLISIS INTEGRAL REAL — ARKON';
@@ -25,6 +26,53 @@ function shell() {
   return p;
 }
 
+function ensureAiControls() {
+  const v = view();
+  if (!v) return null;
+
+  let controls = document.getElementById('arkon-ai-controls') as HTMLElement | null;
+  if (!controls) {
+    controls = document.createElement('section');
+    controls.id = 'arkon-ai-controls';
+    controls.className = 'glass-card rounded-2xl border border-violet-500/25 bg-slate-950/70 p-5 space-y-3';
+    controls.innerHTML = `
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="space-y-1">
+          <div class="text-[10px] font-mono uppercase tracking-widest text-violet-300">Cerebro ARKON · Llama + Turso</div>
+          <div class="text-sm font-semibold text-white">Análisis de neuronas IA</div>
+          <div class="text-xs text-slate-400">Elegí el estado. La propiedad es opcional: vacía activa las 50 neuronas; si indicás una, activa esa neurona y sus conexiones.</div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="arkon-ai-state" class="bg-slate-950 border border-slate-700 text-xs text-slate-200 rounded-lg px-3 py-2">
+            <option value="">Estado material</option>
+            <option value="E01">E01 · Comercial inicial</option>
+            <option value="E02">E02 · Fraguado / seco</option>
+            <option value="E03">E03 · Degradado</option>
+          </select>
+          <input id="arkon-ai-property" type="text" autocomplete="off" placeholder="Propiedad (opcional)" class="bg-slate-950 border border-slate-700 text-xs text-slate-200 rounded-lg px-3 py-2 w-44 focus:outline-none focus:border-violet-400" />
+          <button id="arkon-ai-run" type="button" class="px-4 py-2 rounded-lg text-xs font-bold bg-violet-400 hover:bg-violet-300 text-slate-950 transition">Analizar neuronas IA</button>
+        </div>
+      </div>
+      <div class="text-[10px] text-slate-500">Ejemplos de propiedad: absorcion_agua · porosidad_total · conductividad_termica · resistencia_compresion. No se inventan valores si falta evidencia documental.</div>
+    `;
+    const result = document.getElementById('arkon-real-result');
+    if (result?.parentElement === v) v.insertBefore(controls, result);
+    else v.appendChild(controls);
+  }
+
+  let aiResult = document.getElementById('arkon-ai-result') as HTMLElement | null;
+  if (!aiResult) {
+    aiResult = document.createElement('section');
+    aiResult.id = 'arkon-ai-result';
+    aiResult.className = 'glass-card rounded-2xl border border-violet-500/20 bg-slate-950/70 p-5 space-y-3';
+    aiResult.hidden = true;
+    const normalResult = document.getElementById('arkon-real-result');
+    if (normalResult?.parentElement === v) v.insertBefore(aiResult, normalResult.nextSibling);
+    else v.appendChild(aiResult);
+  }
+  return aiResult;
+}
+
 function setStatus(message: string, tone: 'idle' | 'run' | 'ok' | 'error' = 'idle') {
   const s = status(); if (!s) return;
   s.textContent = message;
@@ -33,6 +81,7 @@ function setStatus(message: string, tone: 'idle' | 'run' | 'ok' | 'error' = 'idl
 
 function reset() {
   const p = shell(); if (!p) return;
+  ensureAiControls();
   setStatus('ARKON REAL · sin análisis ejecutado');
   p.innerHTML = '<div class="space-y-2"><div class="text-[10px] font-mono uppercase tracking-widest text-slate-500">Diagnóstico integral real</div><div class="text-lg font-semibold text-white">Seleccioná un producto y presioná Analizar.</div><div class="text-xs text-slate-500">No se muestran datos inventados. La pantalla se llena únicamente con la respuesta real de ARKON.</div></div>';
 }
@@ -125,6 +174,115 @@ async function run(id: string) {
   } catch (e) { errorView(e instanceof Error ? e.message : String(e)); console.error('ARKON integral analysis failed:', e); }
 }
 
+function renderAiNeurons(data: any, product: any, productId: string) {
+  const panel = ensureAiControls();
+  if (!panel) return;
+  panel.hidden = false;
+  const agents = arr(data?.agents);
+  const activeIds = arr(data?.activeAgentIds);
+  const analyzed = agents.filter((x: any) => x.status === 'analyzed').length;
+  const review = agents.filter((x: any) => x.status === 'needs_review').length;
+  const noEvidence = agents.filter((x: any) => x.status === 'no_evidence').length;
+  const cards = agents.map((agent: any) => {
+    const assessment = agent.assessment || {};
+    const evidence = arr(agent.evidence);
+    const missing = arr(assessment.missingInformation);
+    const evidenceHtml = evidence.length ? `
+      <div class="mt-3 space-y-2">
+        <div class="text-[10px] font-mono uppercase tracking-widest text-slate-500">Evidencia recuperada</div>
+        ${evidence.map((item: any) => `
+          <article class="rounded-lg border border-slate-800 bg-slate-950/60 p-3 space-y-1">
+            <div class="flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono text-slate-400">
+              <span>${esc(item.document || 'Documento sin nombre')}</span>
+              <span>${item.page == null ? 'Página no indicada' : 'Pág. ' + esc(item.page)}</span>
+              <span>${esc(item.property || agent.attribute || '')}</span>
+            </div>
+            <div class="text-xs text-cyan-200">${esc(item.rawValue ?? 'Valor no extraído')} ${esc(item.unit || '')}</div>
+            <div class="text-xs text-slate-300 leading-5">${esc(item.excerpt || '')}</div>
+            <div class="text-[10px] text-slate-500">${esc(item.method || 'Método no identificado')} · ${esc(item.condition || 'Condición no identificada')}</div>
+          </article>
+        `).join('')}
+      </div>` : '<div class="mt-3 text-xs text-slate-500">Esta neurona no recuperó fragmentos documentales verificables.</div>';
+    const statusTone = agent.status === 'analyzed' ? 'text-emerald-400' : agent.status === 'error' ? 'text-rose-400' : 'text-amber-300';
+    const confidence = Number(assessment.confidence);
+    const confidenceText = Number.isFinite(confidence) ? (confidence * 100).toFixed(1) + '%' : '—';
+    return `
+      <details class="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+        <summary class="cursor-pointer flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          <span class="font-mono text-violet-300">${esc(agent.agentId || '')}</span>
+          <span class="font-semibold text-white">${esc(agent.attribute || agent.name || '')}</span>
+          <span class="${statusTone}">${esc(agent.status || 'unknown')}</span>
+          <span class="ml-auto text-slate-400">${esc(assessment.decision || 'sin decisión')} · confianza ${confidenceText}</span>
+        </summary>
+        <div class="mt-3 space-y-2">
+          <div class="text-xs text-slate-300">${esc(assessment.rationale || agent.message || 'Sin justificación devuelta.')}</div>
+          <div class="text-[10px] text-slate-500">Estado solicitado: ${esc(agent.selectedState || 'no indicado')} · coincidencia: ${esc(assessment.stateMatch || 'unknown')} · neuronas conectadas: ${arr(agent.connectedNeuronIds).map(esc).join(', ') || 'sin conexiones declaradas'}</div>
+          ${missing.length ? `<div class="rounded-lg bg-amber-500/5 border border-amber-500/20 p-3"><div class="text-[10px] font-mono text-amber-300 mb-1">Información faltante</div><ul class="list-disc list-inside text-xs text-slate-300 space-y-1">${missing.map((x: any) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+          ${evidenceHtml}
+        </div>
+      </details>`;
+  }).join('');
+
+  setStatus(`ARKON IA · producto ${productId} · material ${esc(product?.materialId || '')} · ${activeIds.length || agents.length}/${data?.availableDirectAgentCount ?? 50} neuronas activadas`, 'ok');
+  panel.innerHTML = `
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div><div class="text-[10px] font-mono uppercase tracking-widest text-violet-300">Resultado de análisis IA</div><div class="text-sm font-semibold text-white">${esc(product?.nombre || 'Producto')} · ${esc(data?.state?.code || 'estado no indicado')}</div></div>
+      <div class="text-[10px] font-mono text-slate-400">${activeIds.length || agents.length} activas / ${data?.availableDirectAgentCount ?? 50}</div>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div class="rounded-lg bg-slate-900 p-3"><div class="text-[10px] text-slate-500">Analizadas</div><div class="text-lg font-bold text-emerald-300">${analyzed}</div></div>
+      <div class="rounded-lg bg-slate-900 p-3"><div class="text-[10px] text-slate-500">Revisión</div><div class="text-lg font-bold text-amber-300">${review}</div></div>
+      <div class="rounded-lg bg-slate-900 p-3"><div class="text-[10px] text-slate-500">Sin evidencia</div><div class="text-lg font-bold text-slate-300">${noEvidence}</div></div>
+      <div class="rounded-lg bg-slate-900 p-3"><div class="text-[10px] text-slate-500">Familia</div><div class="text-sm font-semibold text-white">${esc(data?.productFamily || 'general')}</div></div>
+    </div>
+    <div class="text-[10px] text-slate-500">La evaluación documental no reemplaza ensayos físicos. Los valores solo se muestran cuando coinciden con evidencia recuperada.</div>
+    <div class="space-y-2">${cards || '<div class="text-sm text-slate-500">ARKON no devolvió neuronas para esta solicitud.</div>'}</div>
+  `;
+}
+
+async function runAiNeurons(id: string, stateCode: string, propertyName: string) {
+  id = String(id || '').trim();
+  if (!/^\\d+$/.test(id)) return errorView('El análisis IA requiere el id numérico real del producto.');
+  if (!['E01', 'E02', 'E03'].includes(stateCode)) {
+    const panel = ensureAiControls();
+    if (panel) { panel.hidden = false; panel.innerHTML = '<div class="text-sm text-amber-300">Seleccioná E01, E02 o E03 para indicar el estado material.</div>'; }
+    return;
+  }
+
+  const button = document.getElementById('arkon-ai-run') as HTMLButtonElement | null;
+  const panel = ensureAiControls();
+  if (!panel) return;
+  panel.hidden = false;
+  if (button) { button.disabled = true; button.textContent = 'Consultando Llama y Turso...'; }
+  panel.innerHTML = '<div class="text-sm text-violet-200">El cerebro ARKON está activando las neuronas y recuperando evidencia documental...</div>';
+  try {
+    const product = await getProduct(id);
+    setStatus(`Consultando cerebro ARKON · producto ${id} · estado ${stateCode}`, 'run');
+    const payload: Record<string, unknown> = { productId: id, includeAiNeurons: true, estado: stateCode };
+    if (propertyName.trim()) payload.propertyName = propertyName.trim();
+    const response = await fetch('/api/analizar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify(payload),
+    });
+    const responseText = await response.text();
+    let result: any;
+    try { result = JSON.parse(responseText); } catch { throw new Error(responseText || `HTTP ${response.status}`); }
+    if (!response.ok || result?.ok === false) throw new Error(result?.error || `HTTP ${response.status}`);
+    const ai = result?.aiNeurons || result?.neuronasIA || result?.resultado?.neuronasIA;
+    if (!ai) throw new Error('ARKON no devolvió el bloque de resultados de neuronas IA.');
+    renderAiNeurons(ai, product, id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    panel.innerHTML = `<div class="rounded-lg border border-rose-500/30 bg-rose-500/5 p-4"><div class="text-sm font-semibold text-rose-300">No se pudo completar el análisis IA.</div><div class="mt-1 text-xs text-slate-400">${esc(message)}</div></div>`;
+    setStatus(`Error ARKON IA: ${message}`, 'error');
+    console.error('ARKON AI neuron analysis failed:', error);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = 'Analizar neuronas IA'; }
+  }
+}
+
 async function syncCatalog() {
   try {
     const r = await fetch('/api/products', { cache: 'no-store' }); const data = await r.json(); if (!r.ok || !Array.isArray(data)) return;
@@ -145,6 +303,7 @@ export default function ArkonAnalysisConnector() {
       if (cancelled) return;
       const w = window as any;
       if (typeof w.switchNav !== 'function' || typeof w.cambiarProductoGlobal !== 'function') { window.setTimeout(install, 50); return; }
+      ensureAiControls();
       if (!w.__ARKON_REAL_BRIDGE_INSTALLED__) {
         const nav = w.switchNav; const change = w.cambiarProductoGlobal;
         const analyze = async (id: string) => { const pid = String(id || '').trim(); if (!/^\d+$/.test(pid)) return errorView('Producto inválido.'); change(pid); nav('analysis'); await new Promise(r => setTimeout(r, 120)); await run(pid); };
@@ -154,6 +313,14 @@ export default function ArkonAnalysisConnector() {
     install();
     const click = (event: Event) => {
       const target = event.target as HTMLElement | null; const button = target?.closest('button'); if (!button) return;
+      if (button.id === 'arkon-ai-run') {
+        event.preventDefault(); event.stopPropagation(); (event as any).stopImmediatePropagation?.();
+        const selector = document.querySelector('#global-product-selector') as HTMLSelectElement | null;
+        const state = (document.getElementById('arkon-ai-state') as HTMLSelectElement | null)?.value || '';
+        const property = (document.getElementById('arkon-ai-property') as HTMLInputElement | null)?.value || '';
+        void runAiNeurons(selector?.value || '', state, property);
+        return;
+      }
       const b = button.closest('.arkon-catalog-analyze') as HTMLElement | null;
       if (b) { event.preventDefault(); event.stopPropagation(); (event as any).stopImmediatePropagation?.(); const id = b.getAttribute('data-arkon-product-id') || ''; const w = window as any; if (typeof w.seleccionarYAnalizar === 'function') w.seleccionarYAnalizar(id); else run(id); return; }
       if (textOf(button) === 'analizar') { const selector = document.querySelector('#global-product-selector') as HTMLSelectElement | null; const id = selector?.value || ''; if (id) { event.preventDefault(); (event as any).stopImmediatePropagation?.(); const w = window as any; if (typeof w.seleccionarYAnalizar === 'function') w.seleccionarYAnalizar(id); else run(id); } }
