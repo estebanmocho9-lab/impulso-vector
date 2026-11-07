@@ -26,52 +26,9 @@ function shell() {
   return p;
 }
 
-function ensureAiControls() {
-  const v = view();
-  if (!v) return null;
-
-  let controls = document.getElementById('arkon-ai-controls') as HTMLElement | null;
-  if (!controls) {
-    controls = document.createElement('section');
-    controls.id = 'arkon-ai-controls';
-    controls.className = 'glass-card rounded-2xl border border-violet-500/25 bg-slate-950/70 p-5 space-y-3';
-    controls.innerHTML = `
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div class="space-y-1">
-          <div class="text-[10px] font-mono uppercase tracking-widest text-violet-300">Cerebro ARKON · Llama + Turso</div>
-          <div class="text-sm font-semibold text-white">Análisis de neuronas IA</div>
-          <div class="text-xs text-slate-400">Elegí el estado. La propiedad es opcional: vacía activa las 50 neuronas; si indicás una, activa esa neurona y sus conexiones.</div>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <select id="arkon-ai-state" class="bg-slate-950 border border-slate-700 text-xs text-slate-200 rounded-lg px-3 py-2">
-            <option value="">Estado material</option>
-            <option value="E01">E01 · Comercial inicial</option>
-            <option value="E02">E02 · Fraguado / seco</option>
-            <option value="E03">E03 · Degradado</option>
-          </select>
-          <input id="arkon-ai-property" type="text" autocomplete="off" placeholder="Propiedad (opcional)" class="bg-slate-950 border border-slate-700 text-xs text-slate-200 rounded-lg px-3 py-2 w-44 focus:outline-none focus:border-violet-400" />
-          <button id="arkon-ai-run" type="button" class="px-4 py-2 rounded-lg text-xs font-bold bg-violet-400 hover:bg-violet-300 text-slate-950 transition">Analizar neuronas IA</button>
-        </div>
-      </div>
-      <div class="text-[10px] text-slate-500">Ejemplos de propiedad: absorcion_agua · porosidad_total · conductividad_termica · resistencia_compresion. No se inventan valores si falta evidencia documental.</div>
-    `;
-    const result = document.getElementById('arkon-real-result');
-    if (result?.parentElement === v) v.insertBefore(controls, result);
-    else v.appendChild(controls);
-  }
-
-  let aiResult = document.getElementById('arkon-ai-result') as HTMLElement | null;
-  if (!aiResult) {
-    aiResult = document.createElement('section');
-    aiResult.id = 'arkon-ai-result';
-    aiResult.className = 'glass-card rounded-2xl border border-violet-500/20 bg-slate-950/70 p-5 space-y-3';
-    aiResult.hidden = true;
-    const normalResult = document.getElementById('arkon-real-result');
-    if (normalResult?.parentElement === v) v.insertBefore(aiResult, normalResult.nextSibling);
-    else v.appendChild(aiResult);
-  }
-  return aiResult;
-}
+// El cerebro no se invoca desde controles de la interfaz.
+// El análisis habitual activa las neuronas, que solicitan evidencia al proveedor Llama/Turso.
+function ensureAiControls() { return null; }
 
 function setStatus(message: string, tone: 'idle' | 'run' | 'ok' | 'error' = 'idle') {
   const s = status(); if (!s) return;
@@ -339,14 +296,6 @@ export default function ArkonAnalysisConnector() {
     install();
     const click = (event: Event) => {
       const target = event.target as HTMLElement | null; const button = target?.closest('button'); if (!button) return;
-      if (button.id === 'arkon-ai-run') {
-        event.preventDefault(); event.stopPropagation(); (event as any).stopImmediatePropagation?.();
-        const selector = document.querySelector('#global-product-selector') as HTMLSelectElement | null;
-        const state = (document.getElementById('arkon-ai-state') as HTMLSelectElement | null)?.value || '';
-        const property = (document.getElementById('arkon-ai-property') as HTMLInputElement | null)?.value || '';
-        void runAiNeurons(selector?.value || '', state, property);
-        return;
-      }
       const b = button.closest('.arkon-catalog-analyze') as HTMLElement | null;
       if (b) { event.preventDefault(); event.stopPropagation(); (event as any).stopImmediatePropagation?.(); const id = b.getAttribute('data-arkon-product-id') || ''; const w = window as any; if (typeof w.seleccionarYAnalizar === 'function') w.seleccionarYAnalizar(id); else run(id); return; }
       if (textOf(button) === 'analizar') { const selector = document.querySelector('#global-product-selector') as HTMLSelectElement | null; const id = selector?.value || ''; if (id) { event.preventDefault(); (event as any).stopImmediatePropagation?.(); const w = window as any; if (typeof w.seleccionarYAnalizar === 'function') w.seleccionarYAnalizar(id); else run(id); } }
