@@ -95,6 +95,8 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     analisisProblemas,
   };
 
+  const aiNeurons = arkon?.aiNeurons ?? arkon?.neuronasIA ?? arkon?.diagnosticoIntegral?.neuronasIA ?? arkon?.resultado?.neuronasIA ?? null;
+
   return {
     ok: true,
     motor: arkon?.motor || 'ARKON REAL',
@@ -103,9 +105,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     diagnosticoIntegral,
     resultado,
     materiales: arkon?.materiales || [{ materialId, resultado: { ...activacion, errores, mejoras, reglasMejora, formulas, cruces, triz, analisisProblemas } }],
-    ...((arkon?.neuronasIA?.agents || arkon?.resultado?.agents || arkon?.agents)
-      ? { aiNeurons: arkon?.neuronasIA ?? (arkon?.resultado?.agents ? arkon.resultado : arkon) }
-      : {}),
+    ...(aiNeurons ? { aiNeurons } : {}),
   };
 }
 
