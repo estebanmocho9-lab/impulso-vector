@@ -119,6 +119,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'El análisis requiere el id numérico del producto seleccionado en public.productos.' }, { status: 400 });
     }
 
+    // Solo reenviar estados ARKON explícitos; no inferir E01/E02/E03.
+    const requestedState = typeof body.estado === 'string' ? body.estado.trim().toUpperCase() : '';
+    const estado = ['E01', 'E02', 'E03'].includes(requestedState) ? requestedState : undefined;
+
     const supabase = getSupabase();
     const { data, error } = await supabase
       .from('productos')
@@ -141,6 +145,7 @@ export async function POST(req: NextRequest) {
       material_id: materialId,
       contexto: product.contexto || 'general',
       producto: product.nombre,
+      ...(estado ? { estado } : {}),
     });
 
     const response = await fetch(`${bridgeUrl}/api/analizar`, { method: 'POST', headers, cache: 'no-store', body: payload });
