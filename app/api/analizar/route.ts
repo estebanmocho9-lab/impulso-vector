@@ -103,6 +103,9 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     diagnosticoIntegral,
     resultado,
     materiales: arkon?.materiales || [{ materialId, resultado: { ...activacion, errores, mejoras, reglasMejora, formulas, cruces, triz, analisisProblemas } }],
+    ...((arkon?.neuronasIA?.agents || arkon?.resultado?.agents || arkon?.agents)
+      ? { aiNeurons: arkon?.neuronasIA ?? (arkon?.resultado?.agents ? arkon.resultado : arkon) }
+      : {}),
   };
 }
 
@@ -134,7 +137,17 @@ export async function POST(req: NextRequest) {
     const bridgeUrl = getArkonUrl();
     const token = process.env.ARKON_BRIDGE_TOKEN?.trim();
     const headers = { 'Content-Type': 'application/json', ...(token ? { 'X-ARKON-TOKEN': token } : {}) };
-    const payload = JSON.stringify({ material_id: materialId, contexto: product.contexto || 'general', producto: product.nombre });
+    const payload = JSON.stringify({
+      material_id: materialId,
+      contexto: product.contexto || 'general',
+      producto: product.nombre,
+      ...(body.includeAiNeurons === true ? { includeAiNeurons: true } : {}),
+      ...(typeof body.estado === 'string' ? { estado: body.estado } : {}),
+      ...(typeof body.estadoNombre === 'string' ? { estadoNombre: body.estadoNombre } : {}),
+      ...(typeof body.stateName === 'string' ? { stateName: body.stateName } : {}),
+      ...(typeof body.propertyName === 'string' ? { propertyName: body.propertyName } : {}),
+      ...(Array.isArray(body.neuronIds) ? { neuronIds: body.neuronIds.filter((id: unknown) => typeof id === 'string') } : {}),
+    });
 
     const response = await fetch(`${bridgeUrl}/api/analizar`, { method: 'POST', headers, cache: 'no-store', body: payload });
     const text = await response.text();
@@ -152,7 +165,8 @@ export async function POST(req: NextRequest) {
     // evidenciaTurso ya es una respuesta válida para la prueba documental.
     const activationPresent = Array.isArray(normalized.resultado?.activacion?.neuronasActivadas) && normalized.resultado.activacion.neuronasActivadas.length > 0;
     const brainEvidencePresent = Array.isArray(normalized.resultado?.activacion?.evidenciaTurso);
-    if (!activationPresent && !brainEvidencePresent) {
+    const aiAnalysisPresent = Boolean(arkon?.neuronasIA?.agents || arkon?.resultado?.agents || arkon?.agents);
+    if (!activationPresent && !brainEvidencePresent && !aiAnalysisPresent) {
       try {
         const neuralResponse = await fetch(`${bridgeUrl}/api/neural-analysis`, {
           method: 'POST', headers, cache: 'no-store',
