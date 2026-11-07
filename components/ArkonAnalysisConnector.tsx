@@ -174,7 +174,6 @@ export default function ArkonAnalysisConnector() {
       if (cancelled) return;
       const w = window as any;
       if (typeof w.switchNav !== 'function' || typeof w.cambiarProductoGlobal !== 'function') { window.setTimeout(install, 50); return; }
-      ensureAiControls();
       if (!w.__ARKON_REAL_BRIDGE_INSTALLED__) {
         const nav = w.switchNav; const change = w.cambiarProductoGlobal;
         const analyze = async (id: string) => { const pid = String(id || '').trim(); if (!/^\d+$/.test(pid)) return errorView('Producto inválido.'); change(pid); nav('analysis'); await new Promise(r => setTimeout(r, 120)); await run(pid); };
