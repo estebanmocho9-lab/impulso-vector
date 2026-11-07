@@ -46,6 +46,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
   const problemasDetectados = legacyResult?.problemasDetectados ?? legacyNested?.problemasDetectados ?? diagnostic?.problemasDetectados ?? [];
   const anomalias = legacyResult?.anomalias ?? legacyNested?.anomalias ?? materialResult?.anomalias ?? diagnostic?.anomalias ?? [];
   const propiedadesPendientes = legacyResult?.propiedadesPendientes ?? legacyNested?.propiedadesPendientes ?? materialResult?.propiedadesPendientes ?? diagnostic?.propiedadesPendientes ?? [];
+  const evidenciaTurso = legacyResult?.evidenciaTurso ?? legacyNested?.evidenciaTurso ?? materialResult?.evidenciaTurso ?? diagnostic?.evidenciaTurso ?? activacion?.evidenciaTurso ?? [];
 
   const producto = {
     id: product.id,
@@ -64,6 +65,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     anomalias,
     errores,
     propiedadesPendientes,
+    evidenciaTurso,
     mejoras,
     reglasMejora,
     formulas,
@@ -85,6 +87,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     problemasDetectados,
     anomalias,
     propiedadesPendientes,
+    evidenciaTurso,
     soluciones: diagnostic?.soluciones || { reglas_mejora: reglasMejora, mejoras },
     formulas,
     cruces,
@@ -95,7 +98,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
   return {
     ok: true,
     motor: arkon?.motor || 'ARKON REAL',
-    fuente: arkon?.fuente || 'Supabase + Google Sheets NORMALIZACION',
+    fuente: arkon?.fuente || 'Turso documental para neuronas directas + fuente original de vectores para inversas + Supabase científico',
     producto,
     diagnosticoIntegral,
     resultado,
@@ -144,11 +147,12 @@ export async function POST(req: NextRequest) {
 
     const normalized = normalizeArkon(arkon, product, materialId);
 
-    // Si la respuesta integral no trae activación completa, recuperarla del
-    // endpoint real de activationEngine. Esto no inventa valores: reutiliza
-    // exactamente el cálculo de ARKON sobre NORMALIZACION.
+    // Solo usar el endpoint alternativo si el backend no devolvió ni activación
+    // ni auditoría del cerebro. Una activación con datos pendientes pero con
+    // evidenciaTurso ya es una respuesta válida para la prueba documental.
     const activationPresent = Array.isArray(normalized.resultado?.activacion?.neuronasActivadas) && normalized.resultado.activacion.neuronasActivadas.length > 0;
-    if (!activationPresent) {
+    const brainEvidencePresent = Array.isArray(normalized.resultado?.activacion?.evidenciaTurso);
+    if (!activationPresent && !brainEvidencePresent) {
       try {
         const neuralResponse = await fetch(`${bridgeUrl}/api/neural-analysis`, {
           method: 'POST', headers, cache: 'no-store',
