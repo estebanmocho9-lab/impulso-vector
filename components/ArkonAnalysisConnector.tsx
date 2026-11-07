@@ -76,8 +76,9 @@ function renderIntegral(result: any, product: any, productId: string) {
   const cobertura = Number(a.coberturaPorc);
   const confidence = Number(a.confianzaPromedio);
   const evidenceAudit = arr(a.evidenciaTurso || r.evidenciaTurso || result?.diagnosticoIntegral?.evidenciaTurso);
-  const evidenceGroups = evidenceAudit.filter((group: any) => arr(group.evidence).length > 0);
+  const evidenceGroups = evidenceAudit.filter((group: any) => arr(group.evidence).length > 0 || group.llamaAssessment || arr(group.warnings).length > 0);
   const evidenceCount = evidenceGroups.reduce((sum: number, group: any) => sum + arr(group.evidence).length, 0);
+  const neuronsWithEvidence = evidenceGroups.filter((group: any) => arr(group.evidence).length > 0).length;
   const aiNeurons = result?.aiNeurons || result?.neuronasIA || result?.diagnosticoIntegral?.neuronasIA;
   const aiAgents = arr(aiNeurons?.agents);
   const aiAnalyzed = aiAgents.filter((agent: any) => agent.status === 'analyzed').length;
@@ -90,13 +91,14 @@ function renderIntegral(result: any, product: any, productId: string) {
   const evidenceMarkup = evidenceGroups.map((group: any) => `
     <details class='rounded-lg border border-violet-500/20 bg-slate-950/40 p-3'>
       <summary class='cursor-pointer flex flex-wrap gap-2 text-xs'><span class='font-mono text-violet-300'>${esc(group.aiNeuronId || group.neuronId)}</span><b class='text-white'>${esc(group.propertyName)}</b><span class='text-slate-500'>${arr(group.evidence).length} fragmento(s)</span></summary>
-      <div class='mt-3 space-y-2'>${arr(group.evidence).map((item: any) => `
+      ${group.llamaAssessment ? `<div class='rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 text-[10px] text-slate-300'><b class='text-cyan-200'>Evaluación Llama:</b> ${esc(group.llamaAssessment.status || 'sin evaluación')} · coincidencia de estado: ${esc(group.llamaAssessment.stateMatch || 'unknown')} · decisión: ${esc(group.llamaAssessment.decision || 'sin decisión')}<div class='mt-1'>Valor extraído: ${esc(group.llamaAssessment.extractedValue ?? '—')} ${esc(group.llamaAssessment.extractedUnit || '')} · valor ARKON aceptado: ${esc(group.llamaAssessment.normalizedValue ?? 'no aceptado')}</div>${group.llamaAssessment.rationale ? `<div class='mt-1'>${esc(group.llamaAssessment.rationale)}</div>` : ''}</div>` : ''}
+      <div class='mt-3 space-y-2'>${arr(group.evidence).length ? arr(group.evidence).map((item: any) => `
         <article class='rounded-lg border border-slate-800 p-3 space-y-1'>
           <div class='flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono text-slate-400'><span>${esc(item.document || item.id || 'Documento sin nombre')}</span><span>${item.page == null ? 'Página no indicada' : 'Pág. ' + esc(item.page)}</span><span>${esc(item.property || group.propertyName)}</span></div>
           <div class='text-xs text-cyan-200'>${esc(item.rawValue ?? 'Valor no extraído')} ${esc(item.unit || '')}</div>
           <div class='text-xs text-slate-300 leading-5'>${esc(item.excerpt || '')}</div>
           <div class='text-[10px] text-slate-500'>${esc(item.method || 'Método no identificado')} · ${esc(item.condition || 'Condición no identificada')} · ${esc(item.table || '')}</div>
-        </article>`).join('')}</div>
+        </article>`).join('') : `<div class='text-xs text-slate-500'>No se recuperaron fragmentos documentales para esta neurona.</div>`}</div>
       ${arr(group.warnings).length ? `<ul class='mt-2 text-[10px] text-amber-300 list-disc list-inside'>${arr(group.warnings).map((w: any) => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
     </details>`).join('');
 
@@ -118,7 +120,7 @@ function renderIntegral(result: any, product: any, productId: string) {
     ${card('PROBLEMAS DETECTADOS', list(problemItems, 'Ningún problema supera los umbrales operativos actuales.'), 'border-rose-500/30')}
     ${errors.length ? card('ERRORES / DATOS FALTANTES REPORTADOS POR ARKON', list(errors.map((x: any) => typeof x === 'string' ? x : JSON.stringify(x)), 'Sin errores reportados.'), 'border-rose-500/20') : ''}
     ${aiMarkup}
-    ${card('EVIDENCIA DOCUMENTAL RECUPERADA DESDE TURSO', `<div class='mb-3 text-xs text-slate-400'>Neuronas con fragmentos: ${evidenceGroups.length}/${evidenceAudit.length || 50} · Fragmentos recuperados: ${evidenceCount}. Los valores físicos se muestran tal como aparecen en la fuente; no se convierten a escala ARKON.</div>${evidenceMarkup || '<div class=\'text-sm text-slate-500\'>No se recuperaron fragmentos documentales para esta consulta. Revisá las búsquedas y el estado de Turso.</div>'}`, 'border-violet-500/30')}
+    ${card('EVIDENCIA DOCUMENTAL RECUPERADA DESDE TURSO', `<div class='mb-3 text-xs text-slate-400'>Neuronas con auditoría Llama: ${evidenceGroups.length}/${evidenceAudit.length || 50} · con fragmentos: ${neuronsWithEvidence} · fragmentos recuperados: ${evidenceCount}. Los valores físicos se muestran tal como aparecen en la fuente; no se convierten a escala ARKON.</div>${evidenceMarkup || '<div class=\'text-sm text-slate-500\'>No se recuperaron fragmentos documentales para esta consulta. Revisá las búsquedas y el estado de Turso.</div>'}`, 'border-violet-500/30')}
     ${card('ANOMALÍAS Y DATOS FALTANTES', `<div class="mb-4"><div class="text-xs text-slate-500 mb-2">ANOMALÍAS</div>${list(anomalyItems, '0 anomalías.')}</div><div><div class="text-xs text-slate-500 mb-2">PROPIEDADES SIN DATOS</div>${list(missingItems, '0 propiedades faltantes.')}</div>`, 'border-amber-500/20')}
     ${card('TODAS LAS NEURONAS ACTIVADAS', `<div class="overflow-auto max-h-[520px]"><table class="w-full text-xs"><thead class="sticky top-0 bg-slate-950"><tr><th class="text-left px-2 py-2">ID</th><th class="text-left px-2 py-2">PROPIEDAD</th><th class="text-right px-2 py-2">VALOR</th><th class="text-right px-2 py-2">INV</th><th class="text-right px-2 py-2">CONF</th><th class="text-right px-2 py-2">FÓRMULAS</th></tr></thead><tbody>${neuronRows}</tbody></table></div>`, 'border-slate-700/60')}
     ${card('MEJORAS / SOLUCIONES REALES DEVUELTAS POR ARKON', list(improvementItems, 'ARKON no devolvió mejoras en esta respuesta.'), 'border-emerald-500/30')}
