@@ -95,9 +95,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     analisisProblemas,
   };
 
-  const aiNeurons = arkon?.aiNeurons
-    ?? (arkon?.evidenciaIA ? { status: arkon.evidenciaIA?.status ?? 'completed', evidence: arkon.evidenciaIA, scientificCalculations: arkon?.resultadoCientificoIA ?? null } : null)
-    ?? arkon?.neuronasIA ?? arkon?.diagnosticoIntegral?.neuronasIA ?? arkon?.resultado?.neuronasIA ?? null;
+  const aiNeurons = arkon?.aiNeurons ?? arkon?.neuronasIA ?? arkon?.diagnosticoIntegral?.neuronasIA ?? arkon?.resultado?.neuronasIA ?? null;
 
   return {
     ok: true,
@@ -158,34 +156,6 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok || arkon?.ok === false) {
       return NextResponse.json({ ok: false, error: arkon?.error || `ARKON respondió HTTP ${response.status}`, producto: { id: product.id, nombre: product.nombre, contexto: product.contexto || 'general', materialId }, detalle: arkon }, { status: response.status >= 400 && response.status < 600 ? response.status : 502 });
-    }
-
-    // La ruta científica histórica se conserva. Además, la solicitud de prueba
-    // ejecuta explícitamente el cerebro IA nuevo para que no se confunda una
-    // respuesta del motor tradicional con una evaluación Llama/Turso.
-    if (body.includeAiNeurons !== false) {
-      const aiResponse = await fetch(`${bridgeUrl}/api/analizar-llama-turso`, {
-        method: 'POST',
-        headers,
-        cache: 'no-store',
-        body: JSON.stringify({
-          material_id: materialId,
-          ...(typeof body.estado === 'string' ? { estado: body.estado } : {}),
-          ...(typeof body.estadoNombre === 'string' ? { estadoNombre: body.estadoNombre } : {}),
-          ...(typeof body.stateName === 'string' ? { stateName: body.stateName } : {}),
-          ...(typeof body.propertyName === 'string' ? { propertyName: body.propertyName } : {}),
-          ...(Array.isArray(body.neuronIds) ? { neuronIds: body.neuronIds.filter((id: unknown) => typeof id === 'string') } : {}),
-        }),
-      });
-      const aiText = await aiResponse.text();
-      let aiPayload: any;
-      try { aiPayload = JSON.parse(aiText); }
-      catch { aiPayload = { ok: false, error: aiText || `HTTP ${aiResponse.status}` }; }
-
-      arkon.evidenciaIA = aiResponse.ok && aiPayload?.ok !== false
-        ? aiPayload.evidenciaIA ?? aiPayload
-        : { status: 'failed', httpStatus: aiResponse.status, error: aiPayload?.error || 'No se pudo ejecutar el cerebro IA.' };
-      arkon.resultadoCientificoIA = aiPayload?.resultadoCientifico ?? null;
     }
 
     const normalized = normalizeArkon(arkon, product, materialId);
