@@ -141,12 +141,6 @@ export async function POST(req: NextRequest) {
       material_id: materialId,
       contexto: product.contexto || 'general',
       producto: product.nombre,
-      ...(body.includeAiNeurons === true ? { includeAiNeurons: true } : {}),
-      ...(typeof body.estado === 'string' ? { estado: body.estado } : {}),
-      ...(typeof body.estadoNombre === 'string' ? { estadoNombre: body.estadoNombre } : {}),
-      ...(typeof body.stateName === 'string' ? { stateName: body.stateName } : {}),
-      ...(typeof body.propertyName === 'string' ? { propertyName: body.propertyName } : {}),
-      ...(Array.isArray(body.neuronIds) ? { neuronIds: body.neuronIds.filter((id: unknown) => typeof id === 'string') } : {}),
     });
 
     const response = await fetch(`${bridgeUrl}/api/analizar`, { method: 'POST', headers, cache: 'no-store', body: payload });
@@ -160,34 +154,8 @@ export async function POST(req: NextRequest) {
 
     const normalized = normalizeArkon(arkon, product, materialId);
 
-    // Solo usar el endpoint alternativo si el backend no devolvió ni activación
-    // ni auditoría del cerebro. Una activación con datos pendientes pero con
-    // evidenciaTurso ya es una respuesta válida para la prueba documental.
-    const activationPresent = Array.isArray(normalized.resultado?.activacion?.neuronasActivadas) && normalized.resultado.activacion.neuronasActivadas.length > 0;
-    const brainEvidencePresent = Array.isArray(normalized.resultado?.activacion?.evidenciaTurso);
-    const aiAnalysisPresent = Boolean(arkon?.neuronasIA?.agents || arkon?.resultado?.agents || arkon?.agents);
-    if (!activationPresent && !brainEvidencePresent && !aiAnalysisPresent) {
-      try {
-        const neuralResponse = await fetch(`${bridgeUrl}/api/neural-analysis`, {
-          method: 'POST', headers, cache: 'no-store',
-          body: JSON.stringify({ materialId, contexto: product.contexto || 'general' }),
-        });
-        const neuralText = await neuralResponse.text();
-        const neural = JSON.parse(neuralText);
-        if (neuralResponse.ok && neural?.ok !== false && Array.isArray(neural?.neuronasActivadas)) {
-          normalized.resultado.activacion = neural;
-          normalized.diagnosticoIntegral.cobertura = {
-            neuronasConDatos: neural.neuronasConDatos,
-            totalNeuronas: neural.totalNeuronas,
-            coberturaPorc: neural.coberturaPorc,
-            confianzaPromedio: neural.confianzaPromedio,
-          };
-          normalized.materiales = [{ materialId, resultado: { ...neural, errores: normalized.resultado.errores, mejoras: normalized.resultado.mejoras, reglasMejora: normalized.resultado.reglasMejora, formulas: normalized.resultado.formulas, cruces: normalized.resultado.cruces, triz: normalized.resultado.triz, analisisProblemas: normalized.resultado.analisisProblemas } }];
-        }
-      } catch (fallbackError) {
-        console.warn('ARKON activation fallback no disponible:', fallbackError);
-      }
-    }
+    // Una única petición al análisis estándar. Las neuronas directas solicitan
+    // evidencia a Llama/Turso mediante su proveedor; la app no invoca rutas neuronales.
 
     return NextResponse.json(normalized, { status: 200 });
   } catch (error: any) {
