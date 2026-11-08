@@ -21,8 +21,9 @@ function getSupabase() {
 
 function getArkonUrl() {
   const configured = process.env.ARKON_BRIDGE_URL?.trim().replace(/\/$/, '');
-  if (configured && !configured.includes('trycloudflare.com')) return configured;
-  return 'https://arkon-x951.onrender.com';
+  if (!configured) throw new Error('ARKON_BRIDGE_URL no está configurada en Vercel; se evita el fallback silencioso a un backend antiguo.');
+  if (configured.includes('trycloudflare.com')) throw new Error('ARKON_BRIDGE_URL apunta a un túnel temporal; configurá el dominio estable de ARKON.');
+  return configured;
 }
 
 function firstMaterialResult(arkon: any) {
@@ -142,9 +143,12 @@ export async function POST(req: NextRequest) {
     const token = process.env.ARKON_BRIDGE_TOKEN?.trim();
     const headers = { 'Content-Type': 'application/json', ...(token ? { 'X-ARKON-TOKEN': token } : {}) };
     const payload = JSON.stringify({
+      productId: product.id,
       material_id: materialId,
       contexto: product.contexto || 'general',
       producto: product.nombre,
+      composicion: product.composicion ?? null,
+      soloDiagnostico: true,
       ...(estado ? { estado } : {}),
     });
 
