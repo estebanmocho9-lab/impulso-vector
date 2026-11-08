@@ -46,6 +46,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
   const problemasDetectados = legacyResult?.problemasDetectados ?? legacyNested?.problemasDetectados ?? diagnostic?.problemasDetectados ?? [];
   const anomalias = legacyResult?.anomalias ?? legacyNested?.anomalias ?? materialResult?.anomalias ?? diagnostic?.anomalias ?? [];
   const propiedadesPendientes = legacyResult?.propiedadesPendientes ?? legacyNested?.propiedadesPendientes ?? materialResult?.propiedadesPendientes ?? diagnostic?.propiedadesPendientes ?? [];
+  const evidenciaTurso = legacyResult?.evidenciaTurso ?? legacyNested?.evidenciaTurso ?? materialResult?.evidenciaTurso ?? diagnostic?.evidenciaTurso ?? activacion?.evidenciaTurso ?? [];
 
   const producto = {
     id: product.id,
@@ -64,6 +65,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     anomalias,
     errores,
     propiedadesPendientes,
+    evidenciaTurso,
     mejoras,
     reglasMejora,
     formulas,
@@ -85,6 +87,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     problemasDetectados,
     anomalias,
     propiedadesPendientes,
+    evidenciaTurso,
     soluciones: diagnostic?.soluciones || { reglas_mejora: reglasMejora, mejoras },
     formulas,
     cruces,
@@ -92,14 +95,17 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     analisisProblemas,
   };
 
+  const aiNeurons = arkon?.aiNeurons ?? arkon?.neuronasIA ?? arkon?.diagnosticoIntegral?.neuronasIA ?? arkon?.resultado?.neuronasIA ?? null;
+
   return {
     ok: true,
     motor: arkon?.motor || 'ARKON REAL',
-    fuente: arkon?.fuente || 'Supabase + Google Sheets NORMALIZACION',
+    fuente: arkon?.fuente || 'Turso documental para neuronas directas + fuente original de vectores para inversas + Supabase científico',
     producto,
     diagnosticoIntegral,
     resultado,
     materiales: arkon?.materiales || [{ materialId, resultado: { ...activacion, errores, mejoras, reglasMejora, formulas, cruces, triz, analisisProblemas } }],
+    ...(aiNeurons ? { aiNeurons } : {}),
   };
 }
 
@@ -112,6 +118,10 @@ export async function POST(req: NextRequest) {
     if (!Number.isInteger(productId)) {
       return NextResponse.json({ ok: false, error: 'El análisis requiere el id numérico del producto seleccionado en public.productos.' }, { status: 400 });
     }
+
+    // Solo reenviar estados ARKON explícitos; no inferir E01/E02/E03.
+    const requestedState = typeof body.estado === 'string' ? body.estado.trim().toUpperCase() : '';
+    const estado = ['E01', 'E02', 'E03'].includes(requestedState) ? requestedState : undefined;
 
     const supabase = getSupabase();
     const { data, error } = await supabase
@@ -131,7 +141,12 @@ export async function POST(req: NextRequest) {
     const bridgeUrl = getArkonUrl();
     const token = process.env.ARKON_BRIDGE_TOKEN?.trim();
     const headers = { 'Content-Type': 'application/json', ...(token ? { 'X-ARKON-TOKEN': token } : {}) };
-    const payload = JSON.stringify({ material_id: materialId, contexto: product.contexto || 'general', producto: product.nombre });
+    const payload = JSON.stringify({
+      material_id: materialId,
+      contexto: product.contexto || 'general',
+      producto: product.nombre,
+      ...(estado ? { estado } : {}),
+    });
 
     const response = await fetch(`${bridgeUrl}/api/analizar`, { method: 'POST', headers, cache: 'no-store', body: payload });
     const text = await response.text();
@@ -144,32 +159,8 @@ export async function POST(req: NextRequest) {
 
     const normalized = normalizeArkon(arkon, product, materialId);
 
-    // Si la respuesta integral no trae activación completa, recuperarla del
-    // endpoint real de activationEngine. Esto no inventa valores: reutiliza
-    // exactamente el cálculo de ARKON sobre NORMALIZACION.
-    const activationPresent = Array.isArray(normalized.resultado?.activacion?.neuronasActivadas) && normalized.resultado.activacion.neuronasActivadas.length > 0;
-    if (!activationPresent) {
-      try {
-        const neuralResponse = await fetch(`${bridgeUrl}/api/neural-analysis`, {
-          method: 'POST', headers, cache: 'no-store',
-          body: JSON.stringify({ materialId, contexto: product.contexto || 'general' }),
-        });
-        const neuralText = await neuralResponse.text();
-        const neural = JSON.parse(neuralText);
-        if (neuralResponse.ok && neural?.ok !== false && Array.isArray(neural?.neuronasActivadas)) {
-          normalized.resultado.activacion = neural;
-          normalized.diagnosticoIntegral.cobertura = {
-            neuronasConDatos: neural.neuronasConDatos,
-            totalNeuronas: neural.totalNeuronas,
-            coberturaPorc: neural.coberturaPorc,
-            confianzaPromedio: neural.confianzaPromedio,
-          };
-          normalized.materiales = [{ materialId, resultado: { ...neural, errores: normalized.resultado.errores, mejoras: normalized.resultado.mejoras, reglasMejora: normalized.resultado.reglasMejora, formulas: normalized.resultado.formulas, cruces: normalized.resultado.cruces, triz: normalized.resultado.triz, analisisProblemas: normalized.resultado.analisisProblemas } }];
-        }
-      } catch (fallbackError) {
-        console.warn('ARKON activation fallback no disponible:', fallbackError);
-      }
-    }
+    // Una única petición al análisis estándar. Las neuronas directas solicitan
+    // evidencia a Llama/Turso mediante su proveedor; la app no invoca rutas neuronales.
 
     return NextResponse.json(normalized, { status: 200 });
   } catch (error: any) {
