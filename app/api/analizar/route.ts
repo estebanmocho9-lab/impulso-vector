@@ -21,8 +21,47 @@ function getSupabase() {
 
 function getArkonUrl() {
   const configured = process.env.ARKON_BRIDGE_URL?.trim().replace(/\/$/, '');
-  if (configured && !configured.includes('trycloudflare.com')) return configured;
-  return 'https://arkon-x951.onrender.com';
+  if (!configured) throw new Error('ARKON_BRIDGE_URL no está configurada. Se bloqueó el fallback al backend antiguo de Render.');
+  if (configured.includes('trycloudflare.com')) throw new Error('ARKON_BRIDGE_URL apunta a un túnel temporal; configurá la URL estable del backend ARKON.');
+  return configured;
+}
+
+function normalizeAiNeurons(raw: any, estado?: string) {
+  const rows = Array.isArray(raw) ? raw : Array.isArray(raw?.agents) ? raw.agents : [];
+  const agents = rows.map((row: any) => {
+    const audit = row?.llamaAssessment || row?.assessment || {};
+    const status = String(row?.status || audit?.status || 'not_requested');
+    const mappedStatus = status === 'normalized_value_accepted' ? 'analyzed'
+      : status === 'evidence_found_but_not_arkon_normalized' || status === 'evidence_found_state_unknown' || status === 'no_matching_evidence_selected' ? 'needs_review'
+      : status === 'no_evidence' ? 'no_evidence'
+      : status === 'turso_not_configured' || status === 'turso_query_failed' || status === 'llama_error' ? 'error'
+      : 'needs_review';
+    const evidence = Array.isArray(row?.evidence) ? row.evidence : [];
+    const selectedId = audit?.evidenceId;
+    return {
+      agentId: row?.id || row?.aiNeuronId || row?.neuronId || 'AI-UNKNOWN',
+      name: row?.propertyName || row?.name || 'Propiedad sin identificar',
+      attribute: row?.propertyName || row?.attribute || row?.name || 'Propiedad sin identificar',
+      orientation: row?.orientation || 'direct',
+      status: mappedStatus,
+      assessment: {
+        decision: audit?.decision || status,
+        selectedEvidenceIds: selectedId ? [selectedId] : [],
+        confidence: null,
+        rationale: audit?.rationale || audit?.message || '',
+      },
+    };
+  });
+  return {
+    agents,
+    availableAgentCount: agents.length,
+    directAgentCount: agents.filter((agent: any) => agent.orientation === 'direct').length,
+    inverseAgentCount: agents.filter((agent: any) => agent.orientation === 'inverse').length,
+    state: estado ? { code: estado } : { code: 'unknown' },
+    message: agents.length
+      ? 'Auditoría de recuperación documental y evaluación Llama por neurona; los valores no normalizados permanecen pendientes.'
+      : 'El backend no devolvió auditorías de neuronas.',
+  };
 }
 
 function firstMaterialResult(arkon: any) {
@@ -95,7 +134,8 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
     analisisProblemas,
   };
 
-  const aiNeurons = arkon?.aiNeurons ?? arkon?.neuronasIA ?? arkon?.diagnosticoIntegral?.neuronasIA ?? arkon?.resultado?.neuronasIA ?? null;
+  const aiNeuronsRaw = arkon?.aiNeurons ?? arkon?.neuronasIA ?? arkon?.diagnosticoIntegral?.neuronasIA ?? arkon?.resultado?.neuronasIA ?? [];
+  const aiNeurons = normalizeAiNeurons(aiNeuronsRaw, arkon?.estado);
 
   return {
     ok: true,
@@ -142,9 +182,12 @@ export async function POST(req: NextRequest) {
     const token = process.env.ARKON_BRIDGE_TOKEN?.trim();
     const headers = { 'Content-Type': 'application/json', ...(token ? { 'X-ARKON-TOKEN': token } : {}) };
     const payload = JSON.stringify({
+      productId: product.id,
+      product_id: product.id,
       material_id: materialId,
       contexto: product.contexto || 'general',
       producto: product.nombre,
+      soloDiagnostico: true,
       ...(estado ? { estado } : {}),
     });
 
