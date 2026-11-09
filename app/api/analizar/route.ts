@@ -69,7 +69,7 @@ function firstMaterialResult(arkon: any) {
   return Array.isArray(arkon?.materiales) ? (arkon.materiales[0]?.resultado || {}) : {};
 }
 
-function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
+function normalizeArkon(arkon: any, product: ProductRow, materialId: string, estado?: string) {
   const legacyResult = arkon?.resultado || {};
   const legacyNested = legacyResult?.resultado || {};
   const materialResult = firstMaterialResult(arkon);
@@ -136,7 +136,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
   };
 
   const aiNeuronsRaw = arkon?.aiNeurons ?? arkon?.neuronasIA ?? arkon?.diagnosticoIntegral?.neuronasIA ?? arkon?.resultado?.neuronasIA ?? [];
-  const aiNeurons = normalizeAiNeurons(aiNeuronsRaw, arkon?.estado);
+  const aiNeurons = normalizeAiNeurons(aiNeuronsRaw, estado);
 
   return {
     ok: true,
@@ -201,12 +201,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: arkon?.error || `ARKON respondió HTTP ${response.status}`, producto: { id: product.id, nombre: product.nombre, contexto: product.contexto || 'general', materialId }, detalle: arkon }, { status: response.status >= 400 && response.status < 600 ? response.status : 502 });
     }
 
-    const normalized = normalizeArkon(arkon, product, materialId);
+    const normalized = normalizeArkon(arkon, product, materialId, estado);
 
     // Una única petición al análisis estándar. Las neuronas directas solicitan
     // evidencia a Llama/Turso mediante su proveedor; la app no invoca rutas neuronales.
 
-    return NextResponse.json(normalized, { status: 200 });
+    return NextResponse.json({
+      ...normalized,
+      diagnosticoPuente: {
+        backendHost: new URL(bridgeUrl).host,
+        soloLectura: true,
+        productId: product.id,
+        materialId,
+        estado: estado || 'unknown',
+      },
+    }, { status: 200 });
   } catch (error: any) {
     console.error('Error conectando producto con el análisis completo de ARKON:', error);
     return NextResponse.json({ ok: false, error: error?.message || 'Error conectando con el motor ARKON' }, { status: 502 });
