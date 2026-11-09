@@ -47,6 +47,7 @@ function normalizeAiNeurons(raw: any, estado?: string) {
       assessment: {
         decision: audit?.decision || status,
         selectedEvidenceIds: selectedId ? [selectedId] : [],
+        candidateEvidenceCount: evidence.length,
         confidence: null,
         rationale: audit?.rationale || audit?.message || '',
       },
