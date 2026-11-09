@@ -140,7 +140,7 @@ function normalizeArkon(arkon: any, product: ProductRow, materialId: string) {
   return {
     ok: true,
     motor: arkon?.motor || 'ARKON REAL',
-    fuente: arkon?.fuente || 'Turso documental para neuronas directas + fuente original de vectores para inversas + Supabase científico',
+    fuente: arkon?.fuente || 'Turso documental + Llama para neuronas directas e inversas; Supabase para catálogo y reglas científicas',
     producto,
     diagnosticoIntegral,
     resultado,
