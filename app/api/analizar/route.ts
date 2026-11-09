@@ -22,7 +22,10 @@ function getSupabase() {
 function getArkonUrl() {
   const configured = process.env.ARKON_BRIDGE_URL?.trim().replace(/\/$/, '');
   if (!configured) throw new Error('ARKON_BRIDGE_URL no está configurada. Se bloqueó el fallback al backend antiguo de Render.');
-  if (configured.includes('trycloudflare.com')) throw new Error('ARKON_BRIDGE_URL apunta a un túnel temporal; configurá la URL estable del backend ARKON.');
+  const target = new URL(configured);
+  if (target.protocol !== 'https:') throw new Error('ARKON_BRIDGE_URL debe usar HTTPS.');
+  if (target.hostname.includes('trycloudflare.com')) throw new Error('ARKON_BRIDGE_URL apunta a un túnel temporal; configurá la URL estable del backend ARKON.');
+  if (target.hostname.endsWith('.onrender.com')) throw new Error('Se bloqueó el backend legacy de Render. ARKON debe responder desde el proyecto backend de Vercel.');
   return configured;
 }
 
